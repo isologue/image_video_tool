@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / local config
+.env
+.env.*
+*.local
+
+# Flask / app runtime
+instance/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime data
+output/
+uploads/
+sessions/
+
+# Local debug / verification artifacts
+_check_*.html
+verify_output.png
+
+# Logs
+*.log
+
+# Optional: keep if you don't want local test scratch in repo
+# debug_findings.md
+# FIX_SUMMARY.md
+# IMAGE_SIZE_FIX.md

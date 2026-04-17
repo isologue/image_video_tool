@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini画图</title>
+    <style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --pink-50: #fff5f7;
+            --pink-100: #fff0f5;
+            --pink-200: #ffe4ec;
+            --pink-300: #fbcfe8;
+            --pink-500: #f472b6;
+            --pink-700: #be185d;
+            --pink-900: #831843;
+            --slate-500: #64748b;
+            --slate-700: #334155;
+            --line-soft: rgba(190, 24, 93, 0.08);
+            --shadow-soft: 0 18px 50px rgba(244, 114, 182, 0.10);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #ffffff 0%, #fff5f7 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.94);
+            border-radius: 22px;
+            box-shadow: var(--shadow-soft);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.8);
+            backdrop-filter: blur(12px);
+        }
+        header {
+            background:
+                radial-gradient(circle at top right, rgba(244,114,182,0.16), transparent 26%),
+                linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
+            color: var(--pink-700);
+            padding: 30px;
+            text-align: left;
+            border-bottom: 1px solid rgba(190, 24, 93, 0.06);
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .header-copy h1 { font-size: 30px; margin-bottom: 8px; }
+        .header-copy p { opacity: 0.9; max-width: 760px; line-height: 1.7; }
+        .header-badge {
+            white-space: nowrap;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.78);
+            border: 1px solid rgba(190, 24, 93, 0.08);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--pink-700);
+        }
+        .hero-points {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+        .hero-chip {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.75);
+            border: 1px solid rgba(190, 24, 93, 0.08);
+            font-size: 12px;
+            color: var(--pink-700);
+        }
+        
+        /* Session 信息栏 */
+        .session-bar {
+            background: linear-gradient(135deg, #f8fbff 0%, #eef8ff 100%);
+            border: 1px solid #bae6fd;
+            border-radius: 14px;
+            padding: 14px 18px;
+            margin: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            box-shadow: 0 10px 24px rgba(14, 165, 233, 0.06);
+        }
+        .session-info {
+            color: #0369a1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .session-id {
+            font-family: monospace;
+            background: #e0f2fe;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .session-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            width: auto;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: none;
+            padding: 0 20px 20px;
+        }
+        .tab {
+            flex: 1;
+            padding: 15px 18px;
+            text-align: center;
+            cursor: pointer;
+            border: 1px solid rgba(190, 24, 93, 0.08);
+            background: #fff;
+            font-size: 15px;
+            color: var(--slate-500);
+            transition: all 0.25s;
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+        .tab:hover { background: #fff7fa; color: var(--pink-700); }
+        .tab.active {
+            color: var(--pink-700);
+            background: linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
+            border-color: rgba(244, 114, 182, 0.18);
+            font-weight: 700;
+            transform: translateY(-1px);
+        }
+        .tab-content { display: none; padding: 10px 30px 30px; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        input[type="text"], input[type="password"], textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #f9a8d4;
+        }
+        textarea { resize: vertical; min-height: 80px; }
+        .row { display: flex; gap: 20px; }
+        .col { flex: 1; }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        button {
+            background: linear-gradient(135deg, #fff0f5 0%, #f9a8d4 100%);
+            color: #831843;
+            border: 2px solid #fbcfe8;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(249, 168, 212, 0.3);
+            background: linear-gradient(135deg, #ffe4ec 0%, #fbcfe8 100%);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #e0e0e0;
+            box-shadow: none;
+        }
+        .result-area {
+            margin-top: 30px;
+            padding: 22px;
+            background: linear-gradient(180deg, #fffefe 0%, #fff7fa 100%);
+            border-radius: 16px;
+            min-height: 200px;
+            border: 1px solid rgba(190, 24, 93, 0.06);
+        }
+        .result-image {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .status {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .status.success { background: #fff5f7; color: #be185d; border: 1px solid #fbcfe8; }
+        .status.error { background: #fff5f5; color: #dc2626; border: 1px solid #fecaca; }
+        .status.loading { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+        .image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        .accordion {
+            border: 1px solid #fbcfe8;
+            border-radius: 8px;
+            margin: 20px;
+            overflow: hidden;
+        }
+        .accordion-header {
+            padding: 14px 20px;
+            background: #fff5f7;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #be185d;
+        }
+        .accordion-header:hover { background: #fff0f5; }
+        .accordion-content {
+            padding: 20px;
+            display: none;
+        }
+        .accordion-content.show { display: block; }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+        .gallery img {
+            width: 100%;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .gallery img:hover { transform: scale(1.02); }
+        .image-preview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .preview-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 14px;
+            overflow: hidden;
+            background: linear-gradient(180deg, #fff7fa 0%, #fff0f5 100%);
+            border: 1px solid rgba(190, 24, 93, 0.10);
+            box-shadow: 0 8px 20px rgba(244, 114, 182, 0.08);
+        }
+        .preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .remove-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.9);
+            background: rgba(15, 23, 42, 0.78);
+            color: #fff;
+            font-size: 18px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+        }
+        .remove-btn:hover {
+            transform: none;
+            background: rgba(190, 24, 93, 0.92);
+            box-shadow: 0 8px 18px rgba(190, 24, 93, 0.22);
+        }
+        .upload-hint {
+            margin-top: 10px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--slate-500);
+        }
+        
+        /* 图片放大查看器 */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90%;
+            max-height: 80vh;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 40px;
+            color: white;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            width: auto;
+        }
+        .lightbox-close:hover { color: #f9a8d4; }
+        .lightbox-download {
+            margin-top: 20px;
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #fff0f5 0%, #f9a8d4 100%);
+            color: #831843;
+            border: 2px solid #fbcfe8;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .lightbox-download:hover {
+            background: linear-gradient(135deg, #ffe4ec 0%, #fbcfe8 100%);
+        }
+        
+        /* 图片容器添加下载按钮 */
+        .image-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .image-container img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+        .image-download-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #fbcfe8;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #be185d;
+            transition: all 0.2s;
+            display: none;
+        }
+        .image-container:hover .image-download-btn { display: block; }
+        .image-download-btn:hover {
+            background: #f9a8d4;
+            color: white;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #be185d;
+            font-size: 14px;
+            background: #fff5f7;
+            border-top: 1px solid #fbcfe8;
+        }
+
+        .section-note {
+            margin: 0 30px 24px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(255,240,245,.8), rgba(255,255,255,.96));
+            border: 1px solid rgba(190, 24, 93, 0.08);
+            color: var(--slate-700);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .section-note strong { color: var(--pink-700); }
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .header-top, .session-bar, .row, .tabs {
+                flex-direction: column;
+            }
+            .session-actions { width: 100%; }
+            .btn-sm { width: 100%; }
+            .tab-content { padding: 0 18px 24px; }
+            .section-note { margin: 0 18px 20px; }
+            header, .session-bar, .accordion { margin-left: 0; margin-right: 0; }
+        }
+
+    </style>
+</head>
+<body>
+<div class="container">
+        <header>
+            <h1>🎨 Gemini画图</h1>
+            <p>支持文生图和多参考图生图 · 最多 4 张参考图 · 数据隔离</p>
+        </header>
+        <div class="session-bar">
+            <div class="session-info">
+                <span>🔐 当前会话：</span>
+                <span class="session-id" id="session_id">加载中...</span>
+                <span id="session_status" style="margin-left: 10px; opacity: 0.7;"></span>
+            </div>
+            <div class="session-actions">
+                <button class="btn-sm btn-secondary" onclick="refreshSession()">🔄 刷新状态</button>
+                <button class="btn-sm btn-danger" onclick="clearSession()">🗑️ 清除我的数据</button>
+            </div>
+        </div>
+        <!-- <div class="section-note"><strong>使用建议：</strong>先确认接口配置，再切到对应标签页执行任务。这一轮主要打磨的是信息层级、页面节奏和移动端观感，不改核心生成逻辑。</div> -->
+        <div class="tabs">
+            <button class="tab active" data-tab="text2img">📝 文生图</button>
+            <button class="tab" data-tab="img2img">🖼️ 图生图</button>
+        </div>
+        <div class="accordion">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+                🔑 API 配置 <span>▼</span>
+            </div>
+            <div class="accordion-content show">
+                <div class="row">
+                    <div class="col">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="api_key" placeholder="填入你的中转站 API Key">
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="form-group">
+                            <label>Base URL (中转站地址)</label>
+                            <input type="text" id="base_url" value="{{ default_base_url }}" placeholder="例如：https://your-proxy.com/v1beta">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col">
+                        <button class="btn-secondary" onclick="testConnection()">🔌 测试连接</button>
+                    </div>
+                    <div class="col">
+                        <button class="btn-secondary" onclick="fetchModels()">📋 获取模型列表</button>
+                    </div>
+                </div>
+                <div id="connection_status" class="status" style="display:none; margin-top:10px;"></div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>模型 ID</label>
+                    <select id="model_id">
+                        <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
+                        <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content active" id="text2img">
+            <div class="row">
+                <div class="col">
+                    <div class="form-group">
+                        <label>提示词</label>
+                        <textarea id="txt_prompt" placeholder="描述你想要生成的图片，例如：一只可爱的猫咪在草地上晒太阳"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>负面提示词（可选）</label>
+                        <textarea id="txt_negative" placeholder="描述你不想要的内容，例如：模糊、低质量"></textarea>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="txt_use_last">
+                        <label for="txt_use_last" style="margin:0;">🔄 基于上一张图编辑（连续对话）</label>
+                    </div>
+                    <div class="form-group">
+                        <label>分辨率</label>
+                        <select id="txt_resolution">
+                            <option value="512 (512x512)">512 (0.5K)</option>
+                            <option value="1K (1024x1024)" selected>1K (1024x1024)</option>
+                            <option value="2K (2048x2048)">2K (2048x2048)</option>
+                            <option value="4K (4096x4096)">4K (4096x4096)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>图片比例</label>
+                        <select id="txt_aspect_ratio">
+                            <option value="1:1">1:1（正方形）</option>
+                            <option value="16:9">16:9（横屏）</option>
+                            <option value="9:16">9:16（竖屏）</option>
+                            <option value="4:3">4:3</option>
+                            <option value="3:4">3:4</option>
+                        </select>
+                    </div>
+                    <button id="txt_btn" onclick="textToImage()">🎨 开始生成</button>
+                </div>
+                <div class="col">
+                    <div class="result-area">
+                        <label>生成结果</label>
+                        <div class="hint" style="margin-bottom:12px;">生成成功后会显示在这里，点击图片可放大查看。</div>
+                        <div id="txt_result"><div class="hint">还没有图片，先输入提示词再开始生成。</div></div>
+                        <div id="txt_status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content" id="img2img">
+            <div class="row">
+                <div class="col">
+                    <div class="form-group">
+                        <label>参考图片（最多 4 张）</label>
+                        <input type="file" id="img_input" accept="image/*" multiple onchange="previewImages(this)" style="display:none;">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('img_input').click()" style="width:auto; padding:10px 20px;">📁 选择图片</button>
+                        <p class="upload-hint">支持多选，最多 4 张。已选择：<span id="img_count">0</span>/4</p>
+                        <div id="img_preview_container" class="image-preview-container"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>提示词</label>
+                        <textarea id="img_prompt" placeholder="描述你想要如何修改这张图片"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>负面提示词（可选）</label>
+                        <textarea id="img_negative" placeholder="描述你不想要的内容"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>分辨率</label>
+                        <select id="img_resolution">
+                            <option value="512 (512x512)">512 (0.5K)</option>
+                            <option value="1K (1024x1024)" selected>1K (1024x1024)</option>
+                            <option value="2K (2048x2048)">2K (2048x2048)</option>
+                            <option value="4K (4096x4096)">4K (4096x4096)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>图片比例</label>
+                        <select id="img_aspect_ratio">
+                            <option value="1:1">1:1（正方形）</option>
+                            <option value="16:9">16:9（横屏）</option>
+                            <option value="9:16">9:16（竖屏）</option>
+                            <option value="4:3">4:3</option>
+                            <option value="3:4">3:4</option>
+                        </select>
+                    </div>
+                    <button id="img_btn" onclick="imageToImage()">🎨 开始生成</button>
+                </div>
+                <div class="col">
+                    <div class="result-area">
+                        <label>生成结果</label>
+                        <div class="hint" style="margin-bottom:12px;">上传参考图并填写提示词后，生成结果会显示在这里。</div>
+                        <div id="img_result"><div class="hint">还没有结果，先选择参考图片再开始生成。</div></div>
+                        <div id="img_status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            Made with 🐾 by Moai · v4 
+        </footer>
+    </div>
+    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+        <button class="lightbox-close" onclick="closeLightbox(event)">&times;</button>
+        <img id="lightbox-img" src="" alt="放大图片">
+        <a id="lightbox-download" class="lightbox-download" download>⬇️ 下载图片</a>
+    </div>
+<script>
+let currentSessionId = '';
+        let uploadedImagesBase64 = [];
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        function toggleAccordion(header) {
+            const content = header.nextElementSibling;
+            content.classList.toggle('show');
+            header.querySelector('span').textContent = content.classList.contains('show') ? '▼' : '▶';
+        }
+
+        function showStatus(elementId, message, type) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.className = 'status ' + type;
+            el.style.display = 'block';
+        }
+
+        function resetStatus(elementId) {
+            const el = document.getElementById(elementId);
+            el.textContent = '';
+            el.className = 'status';
+            el.style.display = 'none';
+        }
+
+        async function refreshSession() {
+            try {
+                const res = await fetch('/api/session');
+                const data = await res.json();
+                currentSessionId = data.session_id;
+                document.getElementById('session_id').textContent = data.session_id.substring(0, 8) + '...';
+                let statusText = [];
+                if (data.request_count > 0) statusText.push(`${data.request_count} 次请求`);
+                if (data.has_last_image) statusText.push('📁 有连续对话历史');
+                document.getElementById('session_status').textContent = statusText.join(' · ') || '新会话';
+            } catch (e) {
+                document.getElementById('session_id').textContent = '获取失败';
+            }
+        }
+
+        async function clearSession() {
+            if (!confirm('确定要清除当前会话的所有数据吗？\n\n这将删除：\n- 所有生成的图片\n- 连续对话历史\n\n此操作不可恢复！')) return;
+            try {
+                const res = await fetch('/api/session/clear', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ 会话数据已清除！\n\n新会话 ID: ' + data.new_session_id.substring(0, 8) + '...');
+                    document.getElementById('txt_result').innerHTML = '';
+                    document.getElementById('img_result').innerHTML = '';
+                    refreshSession();
+                } else {
+                    alert('❌ 清除失败：' + data.message);
+                }
+            } catch (e) {
+                alert('❌ 清除失败：' + e.message);
+            }
+        }
+
+        async function testConnection() {
+            const api_key = document.getElementById('api_key').value;
+            const base_url = document.getElementById('base_url').value;
+            const statusEl = document.getElementById('connection_status');
+            statusEl.style.display = 'block';
+            statusEl.className = 'status loading';
+            statusEl.textContent = '测试中...';
+            try {
+                const res = await fetch('/api/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({api_key, base_url})
+                });
+                const data = await res.json();
+                statusEl.className = 'status ' + (data.success ? 'success' : 'error');
+                statusEl.textContent = data.message;
+            } catch (e) {
+                statusEl.className = 'status error';
+                statusEl.textContent = '错误：' + e.message;
+            }
+        }
+
+        async function fetchModels() {
+            const api_key = document.getElementById('api_key').value;
+            const base_url = document.getElementById('base_url').value;
+            const statusEl = document.getElementById('connection_status');
+            statusEl.style.display = 'block';
+            statusEl.className = 'status loading';
+            statusEl.textContent = '获取中...';
+            try {
+                const res = await fetch('/api/models', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({api_key, base_url})
+                });
+                const data = await res.json();
+                if (data.error) {
+                    statusEl.className = 'status error';
+                    statusEl.textContent = data.error;
+                } else {
+                    const select = document.getElementById('model_id');
+                    select.innerHTML = data.models.map(m => `<option value="${m}">${m}</option>`).join('');
+                    statusEl.className = 'status success';
+                    statusEl.textContent = `找到 ${data.models.length} 个模型`;
+                }
+            } catch (e) {
+                statusEl.className = 'status error';
+                statusEl.textContent = '错误：' + e.message;
+            }
+        }
+
+        // 压缩图片到指定大小
+        function compressImage(file, maxSize = 800, quality = 0.7) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // 等比例缩放
+                    if (Math.max(width, height) > maxSize) {
+                        const ratio = maxSize / Math.max(width, height);
+                        width = Math.floor(width * ratio);
+                        height = Math.floor(height * ratio);
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 压缩为 JPEG
+                    canvas.toBlob((blob) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    }, 'image/jpeg', quality);
+                };
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        async function previewImages(input) {
+            const files = input.files;
+            const countSpan = document.getElementById('img_count');
+            
+            if (files.length + uploadedImagesBase64.length > 4) {
+                alert('最多只能上传 4 张图片！');
+                input.value = '';
+                return;
+            }
+            
+            // 检查文件大小并压缩
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+                
+                // 如果文件大于 2MB，先压缩
+                if (file.size > 2 * 1024 * 1024) {
+                    console.log(`文件 ${file.name} 太大 (${fileSizeMB}MB)，正在压缩...`);
+                    try {
+                        const compressed = await compressImage(file, 800, 0.7);
+                        uploadedImagesBase64.push(compressed);
+                        console.log(`压缩完成：${file.name} (${fileSizeMB}MB → 压缩后)`);
+                    } catch (e) {
+                        alert(`文件 ${file.name} 压缩失败：${e.message}`);
+                    }
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        uploadedImagesBase64.push(e.target.result);
+                        renderPreviews();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            renderPreviews();
+            input.value = '';
+        }
+
+        function renderPreviews() {
+            const container = document.getElementById('img_preview_container');
+            const countSpan = document.getElementById('img_count');
+            countSpan.textContent = uploadedImagesBase64.length;
+            container.innerHTML = uploadedImagesBase64.map((src, index) => `
+                <div class="preview-item">
+                    <img src="${src}">
+                    <button class="remove-btn" onclick="removeImage(${index})">×</button>
+                </div>
+            `).join('');
+        }
+
+        function removeImage(index) {
+            uploadedImagesBase64.splice(index, 1);
+            renderPreviews();
+        }
+
+        async function textToImage() {
+            const btn = document.getElementById('txt_btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 正在生成，请稍候';
+            resetStatus('txt_status');
+            const resultContainer = document.getElementById('txt_result');
+            resultContainer.innerHTML = '<div class="hint">正在生成中，结果出来后会显示在这里。</div>';
+            const data = {
+                api_key: document.getElementById('api_key').value,
+                base_url: document.getElementById('base_url').value,
+                model_id: document.getElementById('model_id').value,
+                prompt: document.getElementById('txt_prompt').value,
+                negative_prompt: document.getElementById('txt_negative').value,
+                image_count: 1,
+                resolution: document.getElementById('txt_resolution').value,
+                aspect_ratio: document.getElementById('txt_aspect_ratio').value,
+                use_last_image: document.getElementById('txt_use_last').checked
+            };
+            try {
+                const res = await fetch('/api/text-to-image', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    const container = document.getElementById('txt_result');
+                    const timestamp = new Date().getTime();
+                    container.innerHTML = result.images.map((src, index) => 
+                        `<div class="image-container">
+                            <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
+                            <button class="image-download-btn" onclick="downloadImage('${src}', 'image_${index + 1}.png')">⬇️ 下载</button>
+                        </div>`
+                    ).join('');
+                    showStatus('txt_status', result.message, 'success');
+                    refreshSession();
+                } else {
+                    showStatus('txt_status', result.message, 'error');
+                }
+            } catch (e) {
+                showStatus('txt_status', '错误：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🎨 开始生成';
+            }
+        }
+
+        function openLightbox(src) {
+            const lightbox = document.getElementById('lightbox');
+            const lightboxImg = document.getElementById('lightbox-img');
+            const downloadLink = document.getElementById('lightbox-download');
+            const cleanSrc = src.split('&t=')[0];
+            lightboxImg.src = src;
+            downloadLink.href = cleanSrc;
+            downloadLink.download = 'gemini_image_' + new Date().getTime() + '.png';
+            lightbox.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox(event) {
+            if (event.target.id === 'lightbox' || event.target.classList.contains('lightbox-close')) {
+                const lightbox = document.getElementById('lightbox');
+                lightbox.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        async function downloadImage(src, filename) {
+            event.stopPropagation();
+            try {
+                const response = await fetch(src);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                const a = document.createElement('a');
+                a.href = src;
+                a.download = filename;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const lightbox = document.getElementById('lightbox');
+                if (lightbox.classList.contains('active')) {
+                    closeLightbox({ target: lightbox });
+                }
+            }
+        });
+
+        async function imageToImage() {
+            const btn = document.getElementById('img_btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 正在生成，请稍候';
+            resetStatus('img_status');
+            if (uploadedImagesBase64.length === 0) {
+                showStatus('img_status', '请至少上传 1 张参考图片', 'error');
+                btn.disabled = false;
+                btn.textContent = '🎨 开始生成';
+                return;
+            }
+            const resultContainer = document.getElementById('img_result');
+            resultContainer.innerHTML = '<div class="hint">正在生成中，结果出来后会显示在这里。</div>';
+            const data = {
+                api_key: document.getElementById('api_key').value,
+                base_url: document.getElementById('base_url').value,
+                model_id: document.getElementById('model_id').value,
+                prompt: document.getElementById('img_prompt').value,
+                negative_prompt: document.getElementById('img_negative').value,
+                image_count: 1,
+                resolution: document.getElementById('img_resolution').value,
+                aspect_ratio: document.getElementById('img_aspect_ratio').value,
+                image_data_list: uploadedImagesBase64
+            };
+            try {
+                const res = await fetch('/api/image-to-image', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    const container = document.getElementById('img_result');
+                    const timestamp = new Date().getTime();
+                    container.innerHTML = result.images.map((src, index) => 
+                        `<div class="image-container">
+                            <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
+                            <button class="image-download-btn" onclick="downloadImage('${src}', 'image_${index + 1}.png')">⬇️ 下载</button>
+                        </div>`
+                    ).join('');
+                    showStatus('img_status', result.message, 'success');
+                    refreshSession();
+                } else {
+                    showStatus('img_status', result.message, 'error');
+                }
+            } catch (e) {
+                showStatus('img_status', '错误：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🎨 开始生成';
+            }
+        }
+
+        refreshSession();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+services:
+  gemini-image-tool:
+    build: .
+    container_name: gemini-image-tool-v4
+    ports:
+      - "7863:7860"
+    volumes:
+      - ./output:/app/output
+      - ./sessions:/app/sessions
+    environment:
+      - OUTPUT_DIR=/app/output
+      - SESSIONS_DIR=/app/sessions
+      - DEFAULT_BASE_URL=https://moai.wiki
+      - DEFAULT_MODEL=gemini-3.1-flash-image-preview
+      - DEFAULT_VIDEO_BASE_URL=https://moai.wiki
+      - DEFAULT_VIDEO_MODEL=grok-imagine-1.0-video
+    restart: unless-stopped
