@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gemini 图片生成与编辑工具 - Flask 版本 (多用户隔离版)
-纯 HTML/CSS/JS 前端，Flask 后端 API
-支持完整的 Session 隔离，防止多用户数据混淆
+Gemini 鍥剧墖鐢熸垚涓庣紪杈戝伐鍏?- Flask 鐗堟湰 (澶氱敤鎴烽殧绂荤増)
+绾?HTML/CSS/JS 鍓嶇锛孎lask 鍚庣 API
+鏀寔瀹屾暣鐨?Session 闅旂锛岄槻姝㈠鐢ㄦ埛鏁版嵁娣锋穯
 """
 
 import os
@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 import hashlib
+import shutil
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 from PIL import Image
@@ -24,7 +25,7 @@ import threading
 from io import BytesIO
 from datetime import datetime, timezone
 
-# 配置日志输出到 stdout
+# 閰嶇疆鏃ュ織杈撳嚭鍒?stdout
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(message)s',
@@ -32,53 +33,59 @@ logging.basicConfig(
     force=True
 )
 
-# API 超时配置
-API_TIMEOUT = 360  # 6 分钟超时
+# API 瓒呮椂閰嶇疆
+API_TIMEOUT = 360  # 6 鍒嗛挓瓒呮椂
 
 app = Flask(__name__)
 
-# 配置
+# 閰嶇疆
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/output")
 SESSIONS_DIR = os.getenv("SESSIONS_DIR", "/app/sessions")
 DEFAULT_BASE_URL = os.getenv("DEFAULT_BASE_URL", "https://moai.wiki")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-2.5-flash-image")
 SESSION_COOKIE_NAME = "gemini_session_id"
-SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 天
+SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 澶?
 VIDEO_SESSION_COOKIE_NAME = "video_tool_session_id"
 DEFAULT_VIDEO_BASE_URL = os.getenv("DEFAULT_VIDEO_BASE_URL", DEFAULT_BASE_URL)
 DEFAULT_VIDEO_MODEL = os.getenv("DEFAULT_VIDEO_MODEL", "grok-imagine-1.0-video")
+DEFAULT_GPT_IMAGE_BASE_URL = os.getenv("DEFAULT_GPT_IMAGE_BASE_URL", DEFAULT_BASE_URL)
+DEFAULT_GPT_IMAGE_MODEL = os.getenv("DEFAULT_GPT_IMAGE_MODEL", "gpt-image-2-flatfee")
 DEFAULT_REQUEST_TIMEOUT = int(os.getenv("DEFAULT_REQUEST_TIMEOUT", "60"))
+GEMINI_OUTPUT_SUBDIR = "gemini"
+GPT_IMAGE_OUTPUT_SUBDIR = "gpt"
+GPT_IMAGE_SESSION_SUBDIR = "gpt"
+GPT_IMAGE_SESSION_COOKIE_NAME = "gpt_image_session_id"
 
 
-# 确保目录存在
+# 纭繚鐩綍瀛樺湪
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 Path(SESSIONS_DIR).mkdir(parents=True, exist_ok=True)
 
-# 线程安全的 Session 状态存储
+# 绾跨▼瀹夊叏鐨?Session 鐘舵€佸瓨鍌?
 session_states = {}  # {session_id: {"last_image": str, "created_at": float}}
 session_lock = threading.Lock()
 file_lock = threading.Lock()
 
 
 def get_session_id():
-    """从 Cookie 获取或生成 Session ID"""
+    """浠?Cookie 鑾峰彇鎴栫敓鎴?Session ID"""
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     
-    # 验证 session_id 格式（必须是有效的 UUID）
+    # 楠岃瘉 session_id 鏍煎紡锛堝繀椤绘槸鏈夋晥鐨?UUID锛?
     if session_id:
         try:
             uuid.UUID(session_id)
             return session_id
         except ValueError:
-            pass  # 无效的 UUID，生成新的
+            pass  # 鏃犳晥鐨?UUID锛岀敓鎴愭柊鐨?
     
-    # 生成新的 Session ID
+    # 鐢熸垚鏂扮殑 Session ID
     session_id = str(uuid.uuid4())
     return session_id
 
 
 def set_session_cookie(response, session_id):
-    """设置 Session Cookie"""
+    """璁剧疆 Session Cookie"""
     response.set_cookie(
         SESSION_COOKIE_NAME,
         session_id,
@@ -90,23 +97,25 @@ def set_session_cookie(response, session_id):
 
 
 def get_session_dir(session_id):
-    """获取 Session 的输出目录"""
-    return Path(OUTPUT_DIR) / session_id
+    """Return the session output directory."""
+    session_dir = Path(OUTPUT_DIR) / GEMINI_OUTPUT_SUBDIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
 
 
 def get_session_state_path(session_id):
-    """获取 Session 状态文件路径"""
+    """Return the session state file path."""
     return Path(SESSIONS_DIR) / f"{session_id}.json"
 
 
 def load_session_state(session_id):
-    """加载 Session 状态（从内存或文件）"""
+    """Load session state from memory or disk."""
     with session_lock:
-        # 先检查内存
+        # 鍏堟鏌ュ唴瀛?
         if session_id in session_states:
             return session_states[session_id]
         
-        # 从文件加载
+        # 浠庢枃浠跺姞杞?
         state_path = get_session_state_path(session_id)
         if state_path.exists():
             try:
@@ -115,20 +124,22 @@ def load_session_state(session_id):
                 session_states[session_id] = state
                 return state
             except Exception as e:
-                logging.warning(f"加载 Session 状态失败：{e}")
+                logging.warning(f"鍔犺浇 Session 鐘舵€佸け璐ワ細{e}")
         
-        # 创建新状态
+        # 鍒涘缓鏂扮姸鎬?
         state = {
             "last_image": None,
             "created_at": time.time(),
-            "request_count": 0
+            "request_count": 0,
+            "history": [],
+            "draft": {}
         }
         session_states[session_id] = state
         return state
 
 
 def save_session_state(session_id, state):
-    """保存 Session 状态到文件和内存"""
+    """Persist session state to disk."""
     with session_lock:
         session_states[session_id] = state
         state_path = get_session_state_path(session_id)
@@ -136,11 +147,11 @@ def save_session_state(session_id, state):
             with open(state_path, 'w') as f:
                 json.dump(state, f, indent=2)
         except Exception as e:
-            logging.error(f"保存 Session 状态失败：{e}")
+            logging.error(f"淇濆瓨 Session 鐘舵€佸け璐ワ細{e}")
 
 
 def update_session_last_image(session_id, image_path):
-    """更新 Session 的最后一张图片"""
+    """Update the latest image for a session."""
     state = load_session_state(session_id)
     state["last_image"] = str(image_path)
     state["request_count"] = state.get("request_count", 0) + 1
@@ -148,12 +159,68 @@ def update_session_last_image(session_id, image_path):
     save_session_state(session_id, state)
 
 
+def build_gemini_session_payload(session_id):
+    state = load_session_state(session_id)
+    history = state.get('history', [])
+    return {
+        'session_id': session_id,
+        'created_at': state.get('created_at'),
+        'request_count': state.get('request_count', 0),
+        'has_last_image': state.get('last_image') is not None,
+        'history': history if isinstance(history, list) else [],
+        'last_image_url': f"/output/{session_id}/{Path(state['last_image']).name}" if state.get('last_image') else None,
+        'draft': state.get('draft') or {},
+    }
+
+
+def append_gemini_history(session_id, mode, prompt, image_names):
+    state = load_session_state(session_id)
+    history = state.get('history', [])
+    if not isinstance(history, list):
+        history = []
+    entry = {
+        'mode': mode,
+        'prompt': prompt,
+        'images': [f'/output/{session_id}/{name}' for name in image_names],
+        'created_at': utc_now_iso(),
+    }
+    history.insert(0, entry)
+    state['history'] = history[:20]
+    state['last_accessed'] = time.time()
+    save_session_state(session_id, state)
+    return entry
+
+
+def save_gemini_draft(session_id, payload):
+    state = load_session_state(session_id)
+    draft = {
+        'api_key': payload.get('api_key', ''),
+        'base_url': payload.get('base_url', DEFAULT_BASE_URL),
+        'model_id': payload.get('model_id', DEFAULT_MODEL),
+        'txt_prompt': payload.get('txt_prompt', ''),
+        'txt_negative': payload.get('txt_negative', ''),
+        'txt_resolution': payload.get('txt_resolution', '1K (1024x1024)'),
+        'txt_aspect_ratio': payload.get('txt_aspect_ratio', '1:1'),
+        'txt_use_last': bool(payload.get('txt_use_last', False)),
+        'img_prompt': payload.get('img_prompt', ''),
+        'img_negative': payload.get('img_negative', ''),
+        'img_resolution': payload.get('img_resolution', '1K (1024x1024)'),
+        'img_aspect_ratio': payload.get('img_aspect_ratio', '1:1'),
+        'uploaded_images': payload.get('uploaded_images', [])[:4],
+        'updated_at': utc_now_iso(),
+    }
+    state['draft'] = draft
+    state['last_accessed'] = time.time()
+    save_session_state(session_id, state)
+    return draft
+
+
 def encode_image_to_base64(image_path, max_size=384, jpeg_quality=60):
-    """将图片编码为 base64，自动压缩
+    """灏嗗浘鐗囩紪鐮佷负 base64锛岃嚜鍔ㄥ帇缂?
     
-    优化参数减少 413 错误：
-    - max_size: 512 → 384 (减小 39% 面积)
-    - jpeg_quality: 75 → 60 (减小约 30% 体积)
+    浼樺寲鍙傛暟鍑忓皯 413 閿欒锛?
+    - max_size: 512 鈫?384 (鍑忓皬 39% 闈㈢Н)
+    - jpeg_quality: 75 鈫?60 (鍑忓皬绾?30% 浣撶Н)
     """
     img = Image.open(image_path)
     if img.mode in ('RGBA', 'LA', 'P'):
@@ -168,7 +235,7 @@ def encode_image_to_base64(image_path, max_size=384, jpeg_quality=60):
 
 
 def get_image_mime_type(image_path):
-    """获取图片 MIME 类型"""
+    """鑾峰彇鍥剧墖 MIME 绫诲瀷"""
     ext = Path(image_path).suffix.lower()
     mime_types = {
         ".png": "image/png",
@@ -206,6 +273,442 @@ def set_video_session_cookie(response, session_id):
         samesite='Lax'
     )
     return response
+
+
+def get_gpt_session_id():
+    session_id = request.cookies.get(GPT_IMAGE_SESSION_COOKIE_NAME)
+    if session_id:
+        try:
+            uuid.UUID(session_id)
+            return session_id
+        except ValueError:
+            pass
+    return str(uuid.uuid4())
+
+
+def set_gpt_session_cookie(response, session_id):
+    response.set_cookie(
+        GPT_IMAGE_SESSION_COOKIE_NAME,
+        session_id,
+        max_age=SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
+
+
+def get_gpt_session_dir(session_id):
+    session_dir = Path(OUTPUT_DIR) / GPT_IMAGE_OUTPUT_SUBDIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
+
+
+def get_gpt_session_state_path(session_id):
+    state_dir = Path(SESSIONS_DIR) / GPT_IMAGE_SESSION_SUBDIR
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir / f'{session_id}.json'
+
+
+def load_gpt_session_state(session_id):
+    state_path = get_gpt_session_state_path(session_id)
+    if state_path.exists():
+        try:
+            with state_path.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except Exception as exc:
+            logging.warning(f'Failed to load GPT image session state for {session_id}: {exc}')
+    return {
+        'last_image': None,
+        'created_at': time.time(),
+        'last_accessed': time.time(),
+        'request_count': 0,
+        'last_prompt': '',
+        'last_mode': '',
+        'history': [],
+        'draft': {},
+    }
+
+
+def save_gpt_session_state(session_id, state):
+    state_path = get_gpt_session_state_path(session_id)
+    with file_lock:
+        with state_path.open('w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def update_gpt_session_last_image(session_id, image_path, prompt='', mode=''):
+    state = load_gpt_session_state(session_id)
+    state['last_image'] = str(image_path)
+    state['last_prompt'] = prompt
+    state['last_mode'] = mode
+    state['last_accessed'] = time.time()
+    state['request_count'] = state.get('request_count', 0) + 1
+    save_gpt_session_state(session_id, state)
+
+
+def append_gpt_history(session_id, entry):
+    state = load_gpt_session_state(session_id)
+    history = state.get('history', [])
+    history.insert(0, entry)
+    state['history'] = history[:20]
+    state['last_accessed'] = time.time()
+    save_gpt_session_state(session_id, state)
+
+
+def clear_gpt_session_data(session_id):
+    state_path = get_gpt_session_state_path(session_id)
+    if state_path.exists():
+        state_path.unlink()
+    session_dir = get_gpt_session_dir(session_id)
+    if session_dir.exists():
+        shutil.rmtree(session_dir)
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+
+def download_image_to_session(image_url, output_path):
+    response = requests.get(image_url, timeout=DEFAULT_REQUEST_TIMEOUT)
+    response.raise_for_status()
+    image = Image.open(io.BytesIO(response.content))
+    image.save(output_path)
+    return output_path
+
+
+def save_base64_image_to_session(image_base64, output_path):
+    image_bytes = base64.b64decode(image_base64)
+    image = Image.open(io.BytesIO(image_bytes))
+    image.save(output_path)
+    return output_path
+
+
+def build_gpt_image_headers(api_key):
+    token = (api_key or '').strip()
+    return {'Authorization': token}
+
+
+def iter_gpt_image_auth_headers(api_key):
+    token = (api_key or '').strip()
+    if not token:
+        return []
+
+    candidates = []
+
+    def add(value):
+        if value and value not in candidates:
+            candidates.append(value)
+
+    if token.lower().startswith('bearer '):
+        add(token)
+        add(token[7:].strip())
+    else:
+        add(token)
+        add(f'Bearer {token}')
+
+    return [{'Authorization': value} for value in candidates]
+
+
+def rewind_request_files(files):
+    if not files:
+        return
+    for item in files:
+        if not isinstance(item, tuple) or len(item) < 2:
+            continue
+        payload = item[1]
+        if not isinstance(payload, tuple) or len(payload) < 2:
+            continue
+        file_obj = payload[1]
+        if hasattr(file_obj, 'seek'):
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+
+
+def send_gpt_request(method, url, api_key, **kwargs):
+    base_headers = dict(kwargs.pop('headers', {}) or {})
+    auth_header_candidates = iter_gpt_image_auth_headers(api_key) or [build_gpt_image_headers(api_key)]
+
+    last_response = None
+    last_exception = None
+    for index, auth_headers in enumerate(auth_header_candidates):
+        rewind_request_files(kwargs.get('files'))
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers={**base_headers, **auth_headers},
+                **kwargs,
+            )
+        except requests.RequestException as exc:
+            last_exception = exc
+            if index == len(auth_header_candidates) - 1:
+                raise
+            continue
+
+        last_response = response
+        if response.status_code not in {401, 403} or index == len(auth_header_candidates) - 1:
+            return response
+
+    if last_response is not None:
+        return last_response
+    if last_exception is not None:
+        raise last_exception
+    raise requests.RequestException('GPT image request failed without a response')
+
+
+def get_gpt_interface_mode(payload, default='native'):
+    mode = ''
+    if isinstance(payload, dict):
+        mode = (payload.get('interface_mode') or default).strip().lower()
+    return mode if mode in {'native', 'compatible'} else default
+
+
+def normalize_gpt_image_quality(quality):
+    value = (quality or 'auto').strip().lower()
+    return value if value in {'auto', 'low', 'medium', 'high'} else 'auto'
+
+
+def normalize_gpt_image_size(size):
+    match = re.fullmatch(r'(\d+)x(\d+)', (size or '').strip())
+    if not match:
+        return '1024x1024'
+    width = int(match.group(1))
+    height = int(match.group(2))
+    width = max(16, ((width + 15) // 16) * 16)
+    height = max(16, ((height + 15) // 16) * 16)
+
+    max_edge = 3840
+    min_pixels = 655_360
+    max_pixels = 8_294_400
+
+    long_edge = max(width, height)
+    short_edge = min(width, height)
+    if long_edge / short_edge > 3:
+        if width >= height:
+            height = ((int(width / 3) + 15) // 16) * 16
+        else:
+            width = ((int(height / 3) + 15) // 16) * 16
+
+    if max(width, height) > max_edge:
+        scale = max_edge / max(width, height)
+        width = max(16, int(width * scale) // 16 * 16)
+        height = max(16, int(height * scale) // 16 * 16)
+
+    if width * height < min_pixels:
+        scale = (min_pixels / (width * height)) ** 0.5
+        width = max(16, ((int(width * scale) + 15) // 16) * 16)
+        height = max(16, ((int(height * scale) + 15) // 16) * 16)
+
+    if width * height > max_pixels:
+        scale = (max_pixels / (width * height)) ** 0.5
+        width = max(16, int(width * scale) // 16 * 16)
+        height = max(16, int(height * scale) // 16 * 16)
+
+    return f'{width}x{height}'
+
+
+def normalize_gpt_aspect_ratio(aspect_ratio):
+    value = (aspect_ratio or '1:1').strip()
+    return value if value in {'1:1', '16:9', '9:16', '4:3', '3:4'} else '1:1'
+
+
+def apply_gpt_layout_instruction(prompt, size, aspect_ratio):
+    text = (prompt or '').strip()
+    layout = f'画面比例必须为 {aspect_ratio}，输出方向和尺寸应为 {size}。'
+    return f'{text}\n\n{layout}' if text else layout
+
+
+def parse_markdown_image_urls(text):
+    if not text:
+        return []
+    return re.findall(r'!\[[^\]]*\]\((https?://[^)]+)\)', str(text))
+
+
+def get_uploaded_image_files(files):
+    image_files = files.getlist('image[]')
+    if image_files:
+        return [item for item in image_files if getattr(item, 'filename', '')]
+    image_files = files.getlist('image')
+    return [item for item in image_files if getattr(item, 'filename', '')]
+
+
+def summarize_upstream_error(response):
+    content_type = (response.headers.get('Content-Type') or '').lower()
+    if 'text/html' in content_type:
+        match = re.search(r'<title>([^<]+)</title>', response.text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return response.text[:200]
+    try:
+        return response.json()
+    except Exception:
+        return response.text[:500]
+
+
+def build_gpt_compatible_text_payload(model, prompt):
+    return {
+        'stream': False,
+        'model': model,
+        'messages': [
+            {
+                'role': 'user',
+                'content': prompt,
+            }
+        ],
+    }
+
+
+def build_gpt_compatible_edit_payload(model, prompt, image_urls):
+    if isinstance(image_urls, str):
+        image_urls = [image_urls]
+    content = [{'type': 'text', 'text': prompt}]
+    for image_url in image_urls or []:
+        content.append({'type': 'image_url', 'image_url': {'url': image_url}})
+    return {
+        'stream': False,
+        'model': model,
+        'messages': [
+            {
+                'role': 'user',
+                'content': content,
+            }
+        ],
+    }
+
+
+def parse_gpt_compatible_image_urls(response_data):
+    choices = response_data.get('choices') if isinstance(response_data, dict) else None
+    if not isinstance(choices, list):
+        return []
+    urls = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get('message') or {}
+        content = message.get('content')
+        if isinstance(content, str):
+            urls.extend(parse_markdown_image_urls(content))
+    return list(dict.fromkeys(urls))
+
+
+def fetch_gpt_models(api_key, base_url, interface_mode):
+    candidates = []
+    if interface_mode == 'compatible':
+        candidates = [('/v1/models', 'GET')]
+    else:
+        candidates = [('/v1/models', 'GET')]
+
+    last_error = None
+    for path, method in candidates:
+        url = f'{base_url}{path}'
+        try:
+            response = send_gpt_request(
+                method,
+                url,
+                api_key,
+                timeout=15,
+            )
+            if response.status_code >= 400:
+                last_error = f'{response.status_code} {response.text[:200]}'
+                continue
+            data = response.json()
+            models = data.get('data') or data.get('models') or data.get('items') or []
+            parsed = []
+            for item in models:
+                if isinstance(item, str):
+                    parsed.append(item)
+                elif isinstance(item, dict):
+                    parsed.append(item.get('id') or item.get('name'))
+            parsed = [item for item in parsed if item]
+            if parsed:
+                return sorted(dict.fromkeys(parsed)), None
+        except Exception as exc:
+            last_error = str(exc)
+    return [DEFAULT_GPT_IMAGE_MODEL], last_error
+
+
+def parse_gpt_image_urls(response_data):
+    items = response_data.get('data') if isinstance(response_data, dict) else None
+    if not isinstance(items, list):
+        return []
+    return [item.get('url') for item in items if isinstance(item, dict) and item.get('url')]
+
+
+def parse_gpt_image_items(response_data):
+    items = response_data.get('data') if isinstance(response_data, dict) else None
+    if not isinstance(items, list):
+        return []
+    parsed = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get('url'):
+            parsed.append({'type': 'url', 'value': item['url']})
+        elif item.get('b64_json'):
+            parsed.append({'type': 'b64_json', 'value': item['b64_json']})
+    return parsed
+
+
+def save_gpt_images(session_id, image_urls, prefix, prompt):
+    session_dir = get_gpt_session_dir(session_id)
+    saved_files = []
+    timestamp = int(time.time())
+    for index, image_url in enumerate(image_urls, start=1):
+        output_path = session_dir / f'{prefix}_{timestamp}_{index}.png'
+        download_image_to_session(image_url, output_path)
+        saved_files.append(output_path.name)
+    if saved_files:
+        last_path = session_dir / saved_files[0]
+        update_gpt_session_last_image(session_id, str(last_path), prompt=prompt, mode=prefix)
+        append_gpt_history(session_id, {
+            'created_at': utc_now_iso(),
+            'mode': prefix,
+            'prompt': prompt,
+            'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
+        })
+    return saved_files
+
+
+def save_gpt_image_items(session_id, image_items, prefix, prompt):
+    session_dir = get_gpt_session_dir(session_id)
+    saved_files = []
+    timestamp = int(time.time())
+    for index, image_item in enumerate(image_items, start=1):
+        output_path = session_dir / f'{prefix}_{timestamp}_{index}.png'
+        if image_item['type'] == 'url':
+            download_image_to_session(image_item['value'], output_path)
+        elif image_item['type'] == 'b64_json':
+            save_base64_image_to_session(image_item['value'], output_path)
+        else:
+            continue
+        saved_files.append(output_path.name)
+    if saved_files:
+        last_path = session_dir / saved_files[0]
+        update_gpt_session_last_image(session_id, str(last_path), prompt=prompt, mode=prefix)
+        append_gpt_history(session_id, {
+            'created_at': utc_now_iso(),
+            'mode': prefix,
+            'prompt': prompt,
+            'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
+        })
+    return saved_files
+
+
+def build_gpt_session_payload(session_id):
+    state = load_gpt_session_state(session_id)
+    history = state.get('history', [])
+    return {
+        'session_id': session_id,
+        'created_at': state.get('created_at'),
+        'request_count': state.get('request_count', 0),
+        'has_last_image': bool(state.get('last_image')),
+        'last_prompt': state.get('last_prompt', ''),
+        'last_mode': state.get('last_mode', ''),
+        'history': history,
+        'draft': state.get('draft') or {},
+        'last_image_url': f"/output/gpt/{session_id}/{Path(state['last_image']).name}" if state.get('last_image') else None,
+    }
 
 
 def get_video_session_dir(session_id):
@@ -384,14 +887,19 @@ def fetch_video_models(api_key, base_url):
 
 
 def forward_error_response(response):
-    try:
-        detail = response.json()
-    except Exception:
-        detail = response.text[:500]
+    detail = summarize_upstream_error(response)
+    if response.status_code == 524:
+        message = 'Upstream image request timed out (524). Try a smaller size or a shorter prompt.'
+    elif response.status_code in {401, 403}:
+        message = 'Upstream authentication failed. Check the API key and Authorization format.'
+    elif response.status_code == 413:
+        message = 'Upstream rejected the request as too large. Try a smaller image size or a shorter prompt.'
+    else:
+        message = f'Upstream request failed (HTTP {response.status_code}).'
     return jsonify(
         {
             'success': False,
-            'message': '????????',
+            'message': message,
             'status_code': response.status_code,
             'detail': detail,
         }
@@ -402,9 +910,11 @@ def forward_error_response(response):
 def index():
     session_id = get_session_id()
     video_session_id = get_video_session_id()
+    gpt_session_id = get_gpt_session_id()
     response = make_response(render_template('index.html'))
     response = set_session_cookie(response, session_id)
-    return set_video_session_cookie(response, video_session_id)
+    response = set_video_session_cookie(response, video_session_id)
+    return set_gpt_session_cookie(response, gpt_session_id)
 
 
 @app.route('/gemini-app')
@@ -433,83 +943,162 @@ def grok_app():
     return set_video_session_cookie(response, video_session_id)
 
 
+@app.route('/gpt-image-app')
+def gpt_image_app():
+    session_id = get_gpt_session_id()
+    response = make_response(render_template(
+        'gpt_image_app.html',
+        session_id=session_id,
+        default_base_url=DEFAULT_GPT_IMAGE_BASE_URL,
+        default_model=DEFAULT_GPT_IMAGE_MODEL,
+    ))
+    return set_gpt_session_cookie(response, session_id)
+
+
 @app.route('/output/<session_id>/<filename>')
 def serve_output(session_id, filename):
-    """提供 Session 隔离的图片访问"""
-    # 安全校验：session_id 必须是有效 UUID
+    """Serve an output image for a session."""
     try:
         uuid.UUID(session_id)
     except ValueError:
         return jsonify({'error': 'Invalid session ID'}), 400
-    
+
     session_dir = get_session_dir(session_id)
-    
-    # 防止目录遍历攻击
+
     if '..' in filename or filename.startswith('/'):
         return jsonify({'error': 'Invalid filename'}), 400
-    
-    # 校验文件存在
+
     file_path = session_dir / filename
     if not file_path.exists():
         return jsonify({'error': 'File not found'}), 404
-    
+
     return send_from_directory(str(session_dir), filename)
 
 
-@app.route('/api/session', methods=['GET'])
+@app.route('/output/gpt/<session_id>/<filename>')
+def serve_gpt_output(session_id, filename):
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        return jsonify({'error': 'Invalid session ID'}), 400
+
+    if '..' in filename or filename.startswith('/'):
+        return jsonify({'error': 'Invalid filename'}), 400
+
+    session_dir = get_gpt_session_dir(session_id)
+    file_path = session_dir / filename
+    if not file_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    return send_from_directory(str(session_dir), filename)
+
+
+@app.route('/api/session', methods=['GET', 'POST'])
 def get_session_info():
-    """获取当前 Session 信息"""
+    """鑾峰彇褰撳墠 Session 淇℃伅"""
     session_id = get_session_id()
-    state = load_session_state(session_id)
-    response = make_response(jsonify({
-        'session_id': session_id,
-        'created_at': state.get('created_at'),
-        'request_count': state.get('request_count', 0),
-        'has_last_image': state.get('last_image') is not None
-    }))
+
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or {}
+        draft = save_gemini_draft(session_id, payload)
+        response = make_response(jsonify({
+            'success': True,
+            'session_id': session_id,
+            'draft': draft,
+        }))
+        return set_session_cookie(response, session_id)
+
+    response = make_response(jsonify(build_gemini_session_payload(session_id)))
     return set_session_cookie(response, session_id)
 
 
 @app.route('/api/session/clear', methods=['POST'])
 def clear_session():
-    """清除当前 Session 的历史数据"""
+    """Clear the current session state."""
     session_id = get_session_id()
-    
-    # 清除内存状态
+
+    # 娓呴櫎鍐呭瓨鐘舵€?
     with session_lock:
         if session_id in session_states:
             del session_states[session_id]
-    
-    # 清除文件状态
+
+    # 娓呴櫎鏂囦欢鐘舵€?
     state_path = get_session_state_path(session_id)
     if state_path.exists():
         try:
             state_path.unlink()
         except Exception as e:
-            logging.error(f"删除 Session 状态文件失败：{e}")
-    
-    # 清除图片目录
+            logging.error(f"鍒犻櫎 Session 鐘舵€佹枃浠跺け璐ワ細{e}")
+
+    # 娓呴櫎鍥剧墖鐩綍
     session_dir = get_session_dir(session_id)
     if session_dir.exists():
         try:
-            import shutil
             shutil.rmtree(session_dir)
         except Exception as e:
-            logging.error(f"删除 Session 图片目录失败：{e}")
-    
-    # 生成新的 Session ID
+            logging.error(f"Failed to remove session image directory: {e}")
+
+    # 鐢熸垚鏂扮殑 Session ID
     new_session_id = str(uuid.uuid4())
     response = make_response(jsonify({
         'success': True,
-        'message': 'Session 已清除',
+        'message': 'Session cleared',
         'new_session_id': new_session_id
     }))
     return set_session_cookie(response, new_session_id)
 
 
+@app.route('/api/gpt-image/session', methods=['GET', 'POST'])
+def get_gpt_image_session():
+    session_id = get_gpt_session_id()
+
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or {}
+        state = load_gpt_session_state(session_id)
+        state['draft'] = {
+            'api_key': payload.get('api_key', ''),
+            'base_url': payload.get('base_url', DEFAULT_GPT_IMAGE_BASE_URL),
+            'model': payload.get('model', DEFAULT_GPT_IMAGE_MODEL),
+            'interface_mode': get_gpt_interface_mode(payload),
+            'generate_prompt': payload.get('generate_prompt', ''),
+            'generate_size': payload.get('generate_size', '1024x1024'),
+            'generate_aspect_ratio': payload.get('generate_aspect_ratio', '1:1'),
+            'generate_count': payload.get('generate_count', '1'),
+            'generate_quality': payload.get('generate_quality', 'auto'),
+            'edit_prompt': payload.get('edit_prompt', ''),
+            'edit_size': payload.get('edit_size', '1024x1024'),
+            'edit_aspect_ratio': payload.get('edit_aspect_ratio', '1:1'),
+            'edit_count': payload.get('edit_count', '1'),
+            'edit_quality': payload.get('edit_quality', 'auto'),
+            'use_last_image': bool(payload.get('use_last_image', False)),
+            'edit_references': payload.get('edit_references', [])[:4],
+            'updated_at': utc_now_iso(),
+        }
+        state['last_accessed'] = time.time()
+        save_gpt_session_state(session_id, state)
+        response = jsonify({'success': True, **build_gpt_session_payload(session_id)})
+        return set_gpt_session_cookie(response, session_id)
+
+    response = jsonify({'success': True, **build_gpt_session_payload(session_id)})
+    return set_gpt_session_cookie(response, session_id)
+
+
+@app.route('/api/gpt-image/session/clear', methods=['POST'])
+def clear_gpt_image_session():
+    session_id = get_gpt_session_id()
+    clear_gpt_session_data(session_id)
+    new_session_id = str(uuid.uuid4())
+    response = jsonify({
+        'success': True,
+        'message': 'GPT image session cleared',
+        'new_session_id': new_session_id,
+    })
+    return set_gpt_session_cookie(response, new_session_id)
+
+
 @app.route('/api/models', methods=['POST'])
 def get_models():
-    """获取模型列表"""
+    """鑾峰彇妯″瀷鍒楄〃"""
     data = request.json
     api_key = data.get('api_key', '')
     base_url = data.get('base_url', DEFAULT_BASE_URL)
@@ -538,31 +1127,77 @@ def get_models():
 
 @app.route('/api/test', methods=['POST'])
 def test_connection():
-    """测试连接"""
+    """娴嬭瘯杩炴帴"""
     data = request.json
     api_key = data.get('api_key', '')
     base_url = data.get('base_url', DEFAULT_BASE_URL)
-    
+
     if not api_key:
         return jsonify({'success': False, 'message': '请填写 API Key'})
-    
+
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models"
         headers = {"X-Goog-Api-Key": api_key.strip()}
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            return jsonify({'success': True, 'message': f'连接成功！{base_url}'})
+            return jsonify({'success': True, 'message': f'Connection successful: {base_url}'})
         return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/api/gpt-image/models', methods=['POST'])
+def list_gpt_image_models():
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get('api_key') or '').strip()
+    base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
+    interface_mode = get_gpt_interface_mode(data)
+
+    if not api_key:
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+
+    models, error = fetch_gpt_models(api_key, base_url, interface_mode)
+    return jsonify({'success': True, 'models': models, 'fallback': error is not None, 'error': error})
+
+
+@app.route('/api/gpt-image/test', methods=['POST'])
+def test_gpt_image_connection():
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get('api_key') or '').strip()
+    base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
+    model = (data.get('model') or DEFAULT_GPT_IMAGE_MODEL).strip()
+
+    if not api_key:
+        return jsonify({'success': False, 'message': '请填写 API Key'})
+    if not model:
+        return jsonify({'success': False, 'message': '请填写模型 ID'})
+
+    try:
+        response = send_gpt_request(
+            'POST',
+            f'{base_url}/v1/images/generations',
+            api_key,
+            json={
+                'model': model,
+                'prompt': 'test',
+                'n': 1,
+                'size': '1024x1024',
+            },
+            timeout=15,
+        )
+        if response.status_code < 500:
+            return jsonify({'success': True, 'message': f'GPT 生图接口可访问：{base_url}'})
+        return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
+    except Exception as exc:
+        return jsonify({'success': False, 'message': str(exc)})
+
+
 @app.route('/api/text-to-image', methods=['POST'])
 def text_to_image():
-    """文生图（支持 Session 隔离的连续对话）"""
+    """鏂囩敓鍥撅紙鏀寔 Session 闅旂鐨勮繛缁璇濓級"""
     session_id = get_session_id()
     
-    # 加载 Session 状态
+    # 鍔犺浇 Session 鐘舵€?
     state = load_session_state(session_id)
     last_image = state.get("last_image")
     
@@ -577,7 +1212,7 @@ def text_to_image():
     aspect_ratio = data.get('aspect_ratio', '1:1')
     use_last_image = data.get('use_last_image', False)
     
-    # 转换分辨率格式： "1K (1024x1024)" -> "1K"
+    # 杞崲鍒嗚鲸鐜囨牸寮忥細 "1K (1024x1024)" -> "1K"
     resolution_map = {
         '512 (512x512)': '512',
         '1K (1024x1024)': '1K',
@@ -586,9 +1221,9 @@ def text_to_image():
     }
     image_size = resolution_map.get(resolution, '1K')
     
-    # 调试日志
+    # 璋冭瘯鏃ュ織
     logging.info("=" * 50)
-    logging.info(f"[DEBUG] 收到文生图请求")
+    logging.info("[DEBUG] Received text-to-image request")
     logging.info(f"[DEBUG] Session ID: {session_id[:8]}...")
     logging.info(f"[DEBUG] image_size: {image_size}")
     logging.info(f"[DEBUG] aspect_ratio: {aspect_ratio}")
@@ -602,12 +1237,12 @@ def text_to_image():
     if not prompt:
         return jsonify({'error': '请填写提示词'})
     
-    # 确保 Session 输出目录存在
+    # 纭繚 Session 杈撳嚭鐩綍瀛樺湪
     session_dir = get_session_dir(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
     
     try:
-        logging.info(f"[DEBUG] 开始调用 API...")
+        logging.info("[DEBUG] Calling upstream API")
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
         headers = {
             "Content-Type": "application/json",
@@ -615,16 +1250,17 @@ def text_to_image():
         }
         
         output_paths = []
+        generation_stamp = int(time.time() * 1000)
         
         for i in range(image_count):
-            logging.info(f"[DEBUG] 开始第 {i+1} 次循环...")
+            logging.info(f"[DEBUG] Starting generation loop {i+1}")
             
-            # 构建 payload 后打印调试
-            logging.info(f"[DEBUG] 准备发送 payload...")
+            # 鏋勫缓 payload 鍚庢墦鍗拌皟璇?
+            logging.info("[DEBUG] Preparing payload")
             
-            # 如果使用上一张图（连续对话）
+            # 濡傛灉浣跨敤涓婁竴寮犲浘锛堣繛缁璇濓級
             if use_last_image and last_image and Path(last_image).exists():
-                logging.info(f"[DEBUG] 🔄 使用连续对话模式，参考图：{last_image}")
+                logging.info(f"[DEBUG] Using previous image: {last_image}")
                 base64_image = encode_image_to_base64(last_image, max_size=512, jpeg_quality=75)
                 mime_type = get_image_mime_type(last_image)
                 
@@ -644,8 +1280,8 @@ def text_to_image():
                     }
                 }
             else:
-                logging.info(f"[DEBUG] 📝 使用纯文生图模式")
-                # 纯文生图模式
+                logging.info("[DEBUG] Using text-only generation mode")
+                # 绾枃鐢熷浘妯″紡
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
@@ -660,48 +1296,48 @@ def text_to_image():
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
             
-            # 打印 payload 用于调试
+            # 鎵撳嵃 payload 鐢ㄤ簬璋冭瘯
             import json
             logging.info(f"[DEBUG] Payload: {json.dumps(payload, ensure_ascii=False)[:800]}")
             
-            # 直接调用 API（不重试）
+            # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
             try:
-                logging.info(f"[DEBUG] 发送请求到：{url}")
+                logging.info(f"[DEBUG] Sending request to {url}")
                 response = requests.post(url, json=payload, headers=headers, timeout=API_TIMEOUT)
-                logging.info(f"[DEBUG] 响应状态码：{response.status_code}")
-                logging.info(f"[DEBUG] 响应头：{dict(response.headers)}")
+                logging.info(f"[DEBUG] Response status: {response.status_code}")
+                logging.info(f"[DEBUG] 鍝嶅簲澶达細{dict(response.headers)}")
                 if response.status_code >= 400:
-                    logging.error(f"[DEBUG] 响应体：{response.text[:500]}")
+                    logging.error(f"[DEBUG] 鍝嶅簲浣擄細{response.text[:500]}")
             except requests.exceptions.Timeout:
-                logging.error(f"[TIMEOUT] 请求超时（{API_TIMEOUT}秒）")
-                return jsonify({'success': False, 'message': '⚠️ 上游可能已成功，但传输超时，请检查上游是否已生成图片'})
+                logging.error(f"[TIMEOUT] Request timed out after {API_TIMEOUT} seconds")
+                return jsonify({'success': False, 'message': '鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撹秴鏃讹紝璇锋鏌ヤ笂娓告槸鍚﹀凡鐢熸垚鍥剧墖'})
             except requests.exceptions.RequestException as e:
-                logging.error(f"[ERROR] 请求失败：{e}")
-                logging.error(f"[ERROR] 异常类型：{type(e).__name__}")
-                return jsonify({'success': False, 'message': f'⚠️ 上游可能已成功，但传输失败：{str(e)}'})
+                logging.error(f"[ERROR] Request failed: {e}")
+                logging.error(f"[ERROR] Exception type: {type(e).__name__}")
+                return jsonify({'success': False, 'message': f'鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撳け璐ワ細{str(e)}'})
             
-            # 处理特殊错误码
+            # 澶勭悊鐗规畩閿欒鐮?
             if response.status_code == 413:
-                logging.error(f"[413] 请求太大 - 上游可能已成功处理，但响应无法返回")
-                return jsonify({'success': False, 'message': '⚠️ 请求太大 (413) - 上游可能已成功生成图片，建议检查上游日志'})
+                logging.error("[413] Request too large")
+                return jsonify({'success': False, 'message': 'Request too large (413)'})
             
             if response.status_code == 502:
-                logging.error(f"[502] Bad Gateway - Gemini API 返回空响应或连接断开")
-                logging.error(f"[502] 可能原因：1)Gemini 限流 2)Gemini 服务波动 3)请求体太大被切断")
-                return jsonify({'success': False, 'message': '⚠️ 网关错误 (502) - Gemini API 返回空响应，可能是限流或服务波动，请稍后重试'})
+                logging.error(f"[502] Bad Gateway - Gemini API 杩斿洖绌哄搷搴旀垨杩炴帴鏂紑")
+                logging.error(f"[502] 鍙兘鍘熷洜锛?)Gemini 闄愭祦 2)Gemini 鏈嶅姟娉㈠姩 3)璇锋眰浣撳お澶ц鍒囨柇")
+                return jsonify({'success': False, 'message': '鈿狅笍 缃戝叧閿欒 (502) - Gemini API 杩斿洖绌哄搷搴旓紝鍙兘鏄檺娴佹垨鏈嶅姟娉㈠姩锛岃绋嶅悗閲嶈瘯'})
             
             if response.status_code == 504:
-                logging.error(f"[504] 网关超时 - 上游可能仍在处理或已成功")
-                return jsonify({'success': False, 'message': '⚠️ 网关超时 (504) - 上游可能已成功，建议检查上游日志'})
+                logging.error(f"[504] 缃戝叧瓒呮椂 - 涓婃父鍙兘浠嶅湪澶勭悊鎴栧凡鎴愬姛")
+                return jsonify({'success': False, 'message': 'Gateway timeout (504)'})
             
             if response.status_code == 500:
-                logging.error(f"[500] 服务器错误 - 可能是 HTTP/2 stream 错误")
-                return jsonify({'success': False, 'message': '⚠️ 服务器错误 (500) - 上游可能已成功，建议检查上游日志'})
+                logging.error(f"[500] 鏈嶅姟鍣ㄩ敊璇?- 鍙兘鏄?HTTP/2 stream 閿欒")
+                return jsonify({'success': False, 'message': 'Upstream server error (500)'})
             
             response.raise_for_status()
             result = response.json()
             
-            logging.info(f"[DEBUG] API 返回完整结果：{json.dumps(result, ensure_ascii=False)[:1000]}")
+            logging.info(f"[DEBUG] API response snippet: {json.dumps(result, ensure_ascii=False)[:1000]}")
             
             if "candidates" in result and len(result["candidates"]) > 0:
                 candidate = result["candidates"][0]
@@ -716,76 +1352,77 @@ def text_to_image():
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
                             
-                            output_path = session_dir / f"output_{i+1}.png"
+                            output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"output_{i+1}.png")
+                            output_paths.append(output_path.name)
                             
-                            # 更新 Session 的最后一张图（只记录第一张）
+                            # 鏇存柊 Session 鐨勬渶鍚庝竴寮犲浘锛堝彧璁板綍绗竴寮狅級
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
                     
                     if "text" in part:
                         text = part["text"]
                         
-                        # 方式 1: Markdown base64 格式 ![image](data:image/png;base64,...)
+                        # 鏂瑰紡 1: Markdown base64 鏍煎紡 ![image](data:image/png;base64,...)
                         md_pattern = r'!\[.*?\]\(data:(image/[a-z]+);base64,([A-Za-z0-9+/=]+)\)'
                         match = re.search(md_pattern, text)
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
                             
-                            output_path = session_dir / f"output_{i+1}.png"
+                            output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"output_{i+1}.png")
+                            output_paths.append(output_path.name)
                             
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
                         
-                        # 方式 2: Markdown 外部 URL 格式 ![Image](https://...)
+                        # 鏂瑰紡 2: Markdown 澶栭儴 URL 鏍煎紡 ![Image](https://...)
                         url_pattern = r'!\[.*?\]\((https?://[^\s\)]+\.(png|jpg|jpeg|webp|gif))\)'
                         url_match = re.search(url_pattern, text, re.IGNORECASE)
                         if url_match:
                             image_url = url_match.group(1)
-                            logging.info(f"[DEBUG] 🖼️ 发现外部图片 URL: {image_url}")
+                            logging.info(f"[DEBUG] 馃柤锔?鍙戠幇澶栭儴鍥剧墖 URL: {image_url}")
                             
-                            # 下载图片
+                            # 涓嬭浇鍥剧墖
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
                             
-                            output_path = session_dir / f"output_{i+1}.png"
+                            output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"output_{i+1}.png")
+                            output_paths.append(output_path.name)
                             
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
         
         if output_paths:
+            append_gemini_history(session_id, 'text', prompt, output_paths)
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
                 'message': f'生成成功 {len(output_paths)} 张！'
             })
         
-        return jsonify({'success': False, 'message': '未找到图片数据'})
+        return jsonify({'success': False, 'message': 'No image data found'})
         
     except requests.exceptions.RequestException as e:
-        return jsonify({'success': False, 'message': f'请求错误：{str(e)}'})
+        return jsonify({'success': False, 'message': f'Request error: {str(e)}'})
     except Exception as e:
-        return jsonify({'success': False, 'message': f'错误：{str(e)}'})
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
 @app.route('/api/image-to-image', methods=['POST'])
 def image_to_image():
-    """图生图（Session 隔离，支持多参考图）"""
+    """Image-to-image generation with session isolation."""
     session_id = get_session_id()
-    
+
     data = request.json
     api_key = data.get('api_key', '')
     base_url = data.get('base_url', DEFAULT_BASE_URL)
@@ -795,9 +1432,9 @@ def image_to_image():
     image_count = int(data.get('image_count', 1))
     resolution = data.get('resolution', '1K (1024x1024)')
     aspect_ratio = data.get('aspect_ratio', '1:1')
-    image_data_list = data.get('image_data_list', [])  # base64 列表，支持多张
-    
-    # 转换分辨率格式： "1K (1024x1024)" -> "1K"
+    image_data_list = data.get('image_data_list', [])  # base64 鍒楄〃锛屾敮鎸佸寮?
+
+    # 杞崲鍒嗚鲸鐜囨牸寮忥細 "1K (1024x1024)" -> "1K"
     resolution_map = {
         '512 (512x512)': '512',
         '1K (1024x1024)': '1K',
@@ -805,10 +1442,10 @@ def image_to_image():
         '4K (4096x4096)': '4K'
     }
     image_size = resolution_map.get(resolution, '1K')
-    
-    # 调试日志
-    logging.info(f"[DEBUG] 图生图：image_size={image_size}, aspect_ratio={aspect_ratio}, 参考图数量={len(image_data_list)}")
-    
+
+    # 璋冭瘯鏃ュ織
+    logging.info(f"[DEBUG] 鍥剧敓鍥撅細image_size={image_size}, aspect_ratio={aspect_ratio}, 鍙傝€冨浘鏁伴噺={len(image_data_list)}")
+
     if not api_key:
         return jsonify({'error': '请填写 API Key'})
     if not model_id:
@@ -816,29 +1453,29 @@ def image_to_image():
     if not prompt:
         return jsonify({'error': '请填写提示词'})
     if not image_data_list or len(image_data_list) == 0:
-        return jsonify({'error': '请至少上传 1 张参考图片'})
+        return jsonify({'error': 'Please upload at least 1 reference image'})
     if len(image_data_list) > 4:
-        return jsonify({'error': '最多支持 4 张参考图片'})
-    
-    # 检查图片总大小
+        return jsonify({'error': 'At most 4 reference images are supported'})
+
+    # 妫€鏌ュ浘鐗囨€诲ぇ灏?
     total_size = sum(len(img.split(',')[1]) if ',' in img else len(img) for img in image_data_list)
-    total_size_mb = total_size * 3 / 4 / 1024 / 1024  # base64 转回原始大小估算
-    logging.info(f"[DEBUG] 参考图总大小估算：{total_size_mb:.2f}MB")
+    total_size_mb = total_size * 3 / 4 / 1024 / 1024  # base64 杞洖鍘熷澶у皬浼扮畻
+    logging.info(f"[DEBUG] 鍙傝€冨浘鎬诲ぇ灏忎及绠楋細{total_size_mb:.2f}MB")
     if total_size_mb > 5:
-        return jsonify({'error': f'参考图总大小过大 ({total_size_mb:.2f}MB)，建议每张图不超过 2MB，或在前端使用压缩功能'})
-    
-    # 确保 Session 输出目录存在
+        return jsonify({'error': f'Reference images are too large ({total_size_mb:.2f}MB total)'})
+
+    # 纭繚 Session 杈撳嚭鐩綍瀛樺湪
     session_dir = get_session_dir(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key.strip()
         }
-        
-        # 解析上传的所有图片，编码为 base64
+
+        # 瑙ｆ瀽涓婁紶鐨勬墍鏈夊浘鐗囷紝缂栫爜涓?base64
         encoded_images = []
         for img_data in image_data_list:
             if ',' in img_data:
@@ -847,16 +1484,17 @@ def image_to_image():
             buffer = io.BytesIO()
             img.save(buffer, format="JPEG", quality=75, optimize=True)
             encoded_images.append(base64.b64encode(buffer.getvalue()).decode("utf-8"))
-        
+
         output_paths = []
-        
+        generation_stamp = int(time.time() * 1000)
+
         for i in range(image_count):
-            # 构建 parts 列表：所有参考图 + 提示词
+            # 鏋勫缓 parts 鍒楄〃锛氭墍鏈夊弬鑰冨浘 + 鎻愮ず璇?
             parts = []
             for encoded_img in encoded_images:
                 parts.append({"inlineData": {"mimeType": "image/jpeg", "data": encoded_img}})
             parts.append({"text": prompt})
-            
+
             payload = {
                 "contents": [{
                     "parts": parts
@@ -869,51 +1507,51 @@ def image_to_image():
                     }
                 }
             }
-            
+
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
-            
-            # 直接调用 API（不重试）
+
+            # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
             try:
                 response = requests.post(url, json=payload, headers=headers, timeout=API_TIMEOUT)
             except requests.exceptions.Timeout:
-                logging.error(f"[TIMEOUT] 请求超时")
-                return jsonify({'success': False, 'message': '⚠️ 上游可能已成功，但传输超时，请检查上游是否已生成图片'})
+                logging.error(f"[TIMEOUT] 璇锋眰瓒呮椂")
+                return jsonify({'success': False, 'message': '鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撹秴鏃讹紝璇锋鏌ヤ笂娓告槸鍚﹀凡鐢熸垚鍥剧墖'})
             except requests.exceptions.RequestException as e:
-                logging.error(f"[ERROR] 请求失败：{e}")
-                return jsonify({'success': False, 'message': f'⚠️ 上游可能已成功，但传输失败：{str(e)}'})
-            
-            # 打印响应日志
-            logging.info(f"[DEBUG] 响应状态码：{response.status_code}")
+                logging.error(f"[ERROR] Request failed: {e}")
+                return jsonify({'success': False, 'message': f'鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撳け璐ワ細{str(e)}'})
+
+            # 鎵撳嵃鍝嶅簲鏃ュ織
+            logging.info(f"[DEBUG] Response status: {response.status_code}")
             if response.status_code >= 400:
-                logging.error(f"[DEBUG] 响应体：{response.text[:500]}")
-            
-            # 处理特殊错误码
+                logging.error(f"[DEBUG] 鍝嶅簲浣擄細{response.text[:500]}")
+
+            # 澶勭悊鐗规畩閿欒鐮?
             if response.status_code == 413:
-                logging.error(f"[413] 请求太大")
-                return jsonify({'success': False, 'message': '⚠️ 请求太大 (413) - 上游可能已成功，建议检查上游日志'})
-            
+                logging.error(f"[413] 璇锋眰澶ぇ")
+                return jsonify({'success': False, 'message': 'Request too large (413)'})
+
             if response.status_code == 502:
-                logging.error(f"[502] Bad Gateway - Gemini API 返回空响应或连接断开")
-                logging.error(f"[502] 可能原因：1)Gemini 限流 2)Gemini 服务波动 3)请求体太大被切断")
-                return jsonify({'success': False, 'message': '⚠️ 网关错误 (502) - Gemini API 返回空响应，可能是限流或服务波动，请稍后重试'})
-            
+                logging.error(f"[502] Bad Gateway - Gemini API 杩斿洖绌哄搷搴旀垨杩炴帴鏂紑")
+                logging.error(f"[502] 鍙兘鍘熷洜锛?)Gemini 闄愭祦 2)Gemini 鏈嶅姟娉㈠姩 3)璇锋眰浣撳お澶ц鍒囨柇")
+                return jsonify({'success': False, 'message': '鈿狅笍 缃戝叧閿欒 (502) - Gemini API 杩斿洖绌哄搷搴旓紝鍙兘鏄檺娴佹垨鏈嶅姟娉㈠姩锛岃绋嶅悗閲嶈瘯'})
+
             if response.status_code == 504:
-                logging.error(f"[504] 网关超时")
-                return jsonify({'success': False, 'message': '⚠️ 网关超时 (504) - 上游可能已成功，建议检查上游日志'})
-            
+                logging.error(f"[504] 缃戝叧瓒呮椂")
+                return jsonify({'success': False, 'message': 'Gateway timeout (504)'})
+
             if response.status_code == 500:
-                logging.error(f"[500] 服务器错误")
-                return jsonify({'success': False, 'message': '⚠️ 服务器错误 (500) - 上游可能已成功，建议检查上游日志'})
-            
+                logging.error("[500] Upstream server error")
+                return jsonify({'success': False, 'message': 'Upstream server error (500)'})
+
             response.raise_for_status()
             result = response.json()
-            
+
             if "candidates" in result and len(result["candidates"]) > 0:
                 candidate = result["candidates"][0]
                 content = candidate.get("content", {})
                 parts = content.get("parts", [])
-                
+
                 for part in parts:
                     if "inlineData" in part:
                         inline_data = part["inlineData"]
@@ -921,72 +1559,259 @@ def image_to_image():
                         if mime_type.startswith("image/"):
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
-                            
-                            output_path = session_dir / f"img2img_{i+1}.png"
+
+                            output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"img2img_{i+1}.png")
-                            
-                            # 更新 Session 的最后一张图
+                            output_paths.append(output_path.name)
+
+                            # 鏇存柊 Session 鐨勬渶鍚庝竴寮犲浘
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
-                    
+
                     if "text" in part:
                         text = part["text"]
-                        
-                        # 方式 1: Markdown base64 格式
+
+                        # 鏂瑰紡 1: Markdown base64 鏍煎紡
                         md_pattern = r'!\[.*?\]\(data:(image/[a-z]+);base64,([A-Za-z0-9+/=]+)\)'
                         match = re.search(md_pattern, text)
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
-                            
-                            output_path = session_dir / f"img2img_{i+1}.png"
+
+                            output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"img2img_{i+1}.png")
-                            
+                            output_paths.append(output_path.name)
+
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
-                        
-                        # 方式 2: Markdown 外部 URL 格式
+
+                        # 鏂瑰紡 2: Markdown 澶栭儴 URL 鏍煎紡
                         url_pattern = r'!\[.*?\]\((https?://[^\s\)]+\.(png|jpg|jpeg|webp|gif))\)'
                         url_match = re.search(url_pattern, text, re.IGNORECASE)
                         if url_match:
                             image_url = url_match.group(1)
-                            logging.info(f"[DEBUG] 🖼️ 发现外部图片 URL: {image_url}")
-                            
-                            # 下载图片
+                            logging.info(f"[DEBUG] 馃柤锔?鍙戠幇澶栭儴鍥剧墖 URL: {image_url}")
+
+                            # 涓嬭浇鍥剧墖
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
-                            
-                            output_path = session_dir / f"img2img_{i+1}.png"
+
+                            output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
-                            output_paths.append(f"img2img_{i+1}.png")
-                            
+                            output_paths.append(output_path.name)
+
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
-                                logging.info(f"[DEBUG] ✅ 已更新 last_image: {output_path} (尺寸：{image.size})")
+                                logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
-        
+
         if output_paths:
+            append_gemini_history(session_id, 'image', prompt, output_paths)
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
                 'message': f'生成成功 {len(output_paths)} 张！'
             })
-        
-        return jsonify({'success': False, 'message': '未找到图片数据'})
-        
+
+        return jsonify({'success': False, 'message': 'No image data found'})
+
     except requests.exceptions.RequestException as e:
-        return jsonify({'success': False, 'message': f'请求错误：{str(e)}'})
+        return jsonify({'success': False, 'message': f'Request error: {str(e)}'})
     except Exception as e:
-        return jsonify({'success': False, 'message': f'错误：{str(e)}'})
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
+@app.route('/api/gpt-image/generate', methods=['POST'])
+def gpt_image_generate():
+    session_id = get_gpt_session_id()
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get('api_key') or '').strip()
+    base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
+    model = (data.get('model') or DEFAULT_GPT_IMAGE_MODEL).strip()
+    prompt = (data.get('prompt') or '').strip()
+    image_count = int(data.get('image_count', 1) or 1)
+    size = normalize_gpt_image_size(data.get('size') or '1024x1024')
+    aspect_ratio = normalize_gpt_aspect_ratio(data.get('aspect_ratio'))
+    quality = normalize_gpt_image_quality(data.get('quality'))
+    interface_mode = get_gpt_interface_mode(data)
+    prompt_with_layout = apply_gpt_layout_instruction(prompt, size, aspect_ratio)
+
+    if not api_key:
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+    if not model:
+        return jsonify({'success': False, 'message': '请填写模型 ID'}), 400
+    if not prompt:
+        return jsonify({'success': False, 'message': '请填写提示词'}), 400
+    if image_count < 1 or image_count > 4:
+        return jsonify({'success': False, 'message': 'Image count must be between 1 and 4'}), 400
+    if interface_mode == 'compatible' and image_count != 1:
+        return jsonify({'success': False, 'message': 'Compatible mode only supports 1 image'}), 400
+
+    try:
+        if interface_mode == 'compatible':
+            response = send_gpt_request(
+                'POST',
+                f'{base_url}/v1/chat/completions',
+                api_key,
+                json=build_gpt_compatible_text_payload(model, prompt_with_layout),
+                timeout=API_TIMEOUT,
+            )
+            if response.status_code >= 400:
+                return forward_error_response(response)
+            payload = response.json()
+            image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
+        else:
+            response = send_gpt_request(
+                'POST',
+                f'{base_url}/v1/images/generations',
+                api_key,
+                json={
+                    'model': model,
+                    'prompt': prompt_with_layout,
+                    'n': image_count,
+                    'size': size,
+                    'quality': quality,
+                },
+                timeout=API_TIMEOUT,
+            )
+            if response.status_code >= 400:
+                return forward_error_response(response)
+            payload = response.json()
+            image_items = parse_gpt_image_items(payload)
+        if not image_items:
+            return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
+        saved_files = save_gpt_image_items(session_id, image_items, 'generate', prompt)
+        result = jsonify({
+            'success': True,
+            'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
+            'message': f'生成成功 {len(saved_files)} 张！',
+            'session': build_gpt_session_payload(session_id),
+        })
+        return set_gpt_session_cookie(result, session_id)
+    except requests.RequestException as exc:
+        return jsonify({'success': False, 'message': f'Request error: {exc}'}), 502
+    except Exception as exc:
+        return jsonify({'success': False, 'message': f'Error: {exc}'}), 500
+
+
+@app.route('/api/gpt-image/edit', methods=['POST'])
+def gpt_image_edit():
+    session_id = get_gpt_session_id()
+    api_key = (request.form.get('api_key') or '').strip()
+    base_url = (request.form.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
+    model = (request.form.get('model') or DEFAULT_GPT_IMAGE_MODEL).strip()
+    prompt = (request.form.get('prompt') or '').strip()
+    size = normalize_gpt_image_size(request.form.get('size') or '1024x1024')
+    aspect_ratio = normalize_gpt_aspect_ratio(request.form.get('aspect_ratio'))
+    quality = normalize_gpt_image_quality(request.form.get('quality'))
+    image_count = int(request.form.get('image_count', 1) or 1)
+    use_last = (request.form.get('use_last_image') or '').lower() == 'true'
+    uploaded_files = get_uploaded_image_files(request.files)
+    interface_mode = get_gpt_interface_mode(request.form)
+    prompt_with_layout = apply_gpt_layout_instruction(prompt, size, aspect_ratio)
+
+    if not api_key:
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+    if not model:
+        return jsonify({'success': False, 'message': '请填写模型 ID'}), 400
+    if not prompt:
+        return jsonify({'success': False, 'message': '请填写提示词'}), 400
+    if image_count < 1 or image_count > 4:
+        return jsonify({'success': False, 'message': 'Image count must be between 1 and 4'}), 400
+    if interface_mode == 'compatible' and image_count != 1:
+        return jsonify({'success': False, 'message': 'Compatible mode only supports 1 image'}), 400
+
+    if len(uploaded_files) > 4:
+        return jsonify({'success': False, 'message': '最多支持 4 张参考图'}), 400
+
+    outbound_streams = []
+    local_reference_paths = []
+    try:
+        if use_last and not uploaded_files:
+            state = load_gpt_session_state(session_id)
+            last_image = state.get('last_image')
+            if not last_image or not Path(last_image).exists():
+                return jsonify({'success': False, 'message': 'No reusable image found in the current session'}), 400
+            local_reference_paths = [Path(last_image)]
+            if interface_mode == 'compatible':
+                image_urls = [f'/output/gpt/{session_id}/{local_reference_paths[0].name}']
+            else:
+                outbound_stream = open(last_image, 'rb')
+                outbound_streams.append(outbound_stream)
+                outbound_files = [('image[]', (local_reference_paths[0].name, outbound_stream, get_image_mime_type(last_image)))]
+        else:
+            if not uploaded_files:
+                return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
+            outbound_files = []
+            for index, uploaded_file in enumerate(uploaded_files, start=1):
+                compressed_stream, filename = compress_uploaded_image(uploaded_file)
+                outbound_streams.append(compressed_stream)
+                outbound_files.append(('image[]', (filename, compressed_stream, 'image/jpeg')))
+                if interface_mode == 'compatible':
+                    reference_dir = get_gpt_session_dir(session_id)
+                    reference_path = reference_dir / f'reference_{int(time.time())}_{index}.jpg'
+                    with reference_path.open('wb') as f:
+                        f.write(compressed_stream.getvalue())
+                    local_reference_paths.append(reference_path)
+
+        if interface_mode == 'compatible':
+            if not local_reference_paths:
+                return jsonify({'success': False, 'message': 'Compatible mode requires a reference image'}), 400
+            origin = request.host_url.rstrip('/')
+            reference_urls = [f'{origin}/output/gpt/{session_id}/{path.name}' for path in local_reference_paths]
+            response = send_gpt_request(
+                'POST',
+                f'{base_url}/v1/chat/completions',
+                api_key,
+                json=build_gpt_compatible_edit_payload(model, prompt_with_layout, reference_urls),
+                timeout=API_TIMEOUT,
+            )
+            if response.status_code >= 400:
+                return forward_error_response(response)
+            payload = response.json()
+            image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
+        else:
+            response = send_gpt_request(
+                'POST',
+                f'{base_url}/v1/images/edits',
+                api_key,
+                data={
+                    'model': model,
+                    'prompt': prompt_with_layout,
+                    'n': str(image_count),
+                    'size': size,
+                    'quality': quality,
+                },
+                files=outbound_files,
+                timeout=API_TIMEOUT,
+            )
+            if response.status_code >= 400:
+                return forward_error_response(response)
+            payload = response.json()
+            image_items = parse_gpt_image_items(payload)
+
+        if not image_items:
+            return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
+        saved_files = save_gpt_image_items(session_id, image_items, 'edit', prompt)
+        result = jsonify({
+            'success': True,
+            'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
+            'message': f'编辑成功 {len(saved_files)} 张！',
+            'session': build_gpt_session_payload(session_id),
+        })
+        return set_gpt_session_cookie(result, session_id)
+    except requests.RequestException as exc:
+        return jsonify({'success': False, 'message': f'Request error: {exc}'}), 502
+    except Exception as exc:
+        return jsonify({'success': False, 'message': f'Error: {exc}'}), 500
+    finally:
+        for outbound_stream in outbound_streams:
+            outbound_stream.close()
 
 
 @app.route('/api/video/generate', methods=['POST', 'OPTIONS'])
@@ -1008,22 +1833,22 @@ def generate_video():
         try:
             seconds = int(seconds_raw)
         except ValueError:
-            return jsonify({'success': False, 'message': '????????'}), 400
+            return jsonify({'success': False, 'message': '视频时长格式不正确'}), 400
 
     if not api_key:
-        return jsonify({'success': False, 'message': '??? API Key'}), 400
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
     if not prompt:
-        return jsonify({'success': False, 'message': '??????'}), 400
+        return jsonify({'success': False, 'message': '请填写提示词'}), 400
     if not size:
-        return jsonify({'success': False, 'message': '???????'}), 400
+        return jsonify({'success': False, 'message': '请选择视频尺寸'}), 400
     if quality not in {'high', 'standard'}:
-        return jsonify({'success': False, 'message': '??????????'}), 400
+        return jsonify({'success': False, 'message': '请选择正确的视频质量'}), 400
     if seconds is not None and seconds not in {6, 10, 15}:
-        return jsonify({'success': False, 'message': '??????? 6 / 10 / 15 ?'}), 400
+        return jsonify({'success': False, 'message': '视频时长只能是 6 / 10 / 15 秒'}), 400
 
     files = request.files.getlist('input_reference')
     if len(files) > 4:
-        return jsonify({'success': False, 'message': '???? 4 ????'}), 400
+        return jsonify({'success': False, 'message': '最多支持 4 张参考图'}), 400
 
     multipart_data = {
         'model': model,
@@ -1052,7 +1877,7 @@ def generate_video():
             timeout=DEFAULT_REQUEST_TIMEOUT,
         )
     except requests.RequestException as exc:
-        return jsonify({'success': False, 'message': f'????: {exc}'}), 502
+        return jsonify({'success': False, 'message': f'请求失败：{exc}'}), 502
     finally:
         for _, file_tuple in outbound_files:
             file_tuple[1].close()
@@ -1069,7 +1894,7 @@ def generate_video():
         'task_id': task['task_id'],
         'video_id': task['video_id'],
         'status': task['status'],
-        'message': '???????',
+        'message': '提交成功',
         'task': task,
     })
     return set_video_session_cookie(result, session_id)
@@ -1087,10 +1912,10 @@ def query_video():
     base_url = sanitize_base_url(request.args.get('base_url'))
 
     if not api_key:
-        return jsonify({'success': False, 'message': '??? API Key'}), 400
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
     lookup_id = video_id or task_id
     if not lookup_id:
-        return jsonify({'success': False, 'message': '??? task_id ? video_id'}), 400
+        return jsonify({'success': False, 'message': '请提供 task_id 或 video_id'}), 400
 
     local_task = find_task(session_id, task_id=task_id, video_id=video_id)
     if local_task and not video_id:
@@ -1103,7 +1928,7 @@ def query_video():
             timeout=DEFAULT_REQUEST_TIMEOUT,
         )
     except requests.RequestException as exc:
-        return jsonify({'success': False, 'message': f'????: {exc}'}), 502
+        return jsonify({'success': False, 'message': f'请求失败：{exc}'}), 502
 
     if response.status_code >= 400:
         return forward_error_response(response)
@@ -1176,7 +2001,7 @@ def session_state():
         return set_video_session_cookie(response, session_id)
 
     clear_video_session_data(session_id)
-    response = jsonify({'success': True, 'session_id': session_id, 'message': '?????????'})
+    response = jsonify({'success': True, 'session_id': session_id, 'message': '当前会话数据已清空'})
     return set_video_session_cookie(response, session_id)
 
 
@@ -1190,7 +2015,7 @@ def list_video_models():
     base_url = sanitize_base_url(data.get('base_url'))
 
     if not api_key:
-        return jsonify({'success': False, 'message': '??? API Key'}), 400
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
 
     models, error = fetch_video_models(api_key, base_url)
     return jsonify({'success': True, 'models': models, 'fallback': error is not None, 'error': error})
@@ -1198,7 +2023,7 @@ def list_video_models():
 
 @app.route('/api/cleanup', methods=['POST'])
 def cleanup_sessions():
-    """清理过期 Session（可选的管理接口）"""
+    """Clean up expired sessions."""
     data = request.json or {}
     max_age_hours = int(data.get('max_age_hours', 24))
     
@@ -1217,23 +2042,23 @@ def cleanup_sessions():
             if last_accessed < cutoff:
                 session_id = state_file.stem
                 
-                # 删除状态文件
+                # 鍒犻櫎鐘舵€佹枃浠?
                 state_file.unlink()
                 
-                # 删除图片目录
+                # 鍒犻櫎鍥剧墖鐩綍
                 session_dir = get_session_dir(session_id)
                 if session_dir.exists():
                     shutil.rmtree(session_dir)
                 
-                # 清除内存
+                # 娓呴櫎鍐呭瓨
                 with session_lock:
                     if session_id in session_states:
                         del session_states[session_id]
                 
                 cleaned += 1
-                logging.info(f"[CLEANUP] 清理过期 Session: {session_id[:8]}...")
+                logging.info(f"[CLEANUP] 娓呯悊杩囨湡 Session: {session_id[:8]}...")
         except Exception as e:
-            logging.error(f"[CLEANUP] 清理 Session 失败：{e}")
+            logging.error(f"[CLEANUP] Failed to clean session: {e}")
     
     return jsonify({
         'success': True,

@@ -345,7 +345,7 @@
         <section class="hero">
             <div class="hero-grid">
                 <div>
-                    <h1>GROK<br>视频生成</h1>
+                    <h1>GROK视频生成</h1>
                     <!-- <p>基于 Flask + Docker 的视频生成站点，接入 `https://moai.wiki` 视频接口。支持提示词、参考图、尺寸、时长、质量配置，以及会话级任务列表与单任务进度查询。</p> -->
                     <div class="badge-row">
                         <div class="badge">最多 4 张参考图</div>
@@ -672,6 +672,7 @@
                 button.addEventListener("click", () => {
                     state.references.splice(Number(button.dataset.index), 1);
                     renderPreviews();
+                    scheduleDraftSave();
                 });
             });
         }
@@ -734,9 +735,10 @@
             }
         }
 
-        function taskCard(task) {
+        function taskCard(task, index) {
             const hasVideo = Boolean(task.video_url);
             const secondsText = task.seconds ? `${task.seconds}s` : "6s";
+            const previewId = `videoPreview-${index}`;
             return `
                 <article class="task-card">
                     <div class="task-head">
@@ -755,11 +757,21 @@
                     <div class="task-actions">
                         <button type="button" class="btn-query" data-id="${task.video_id || task.task_id}">查询进度</button>
                         ${hasVideo ? `<button type="button" class="btn-query btn-video-link" data-url="${task.video_url}">获取视频地址</button>` : ""}
+                        ${hasVideo ? `<button type="button" class="btn-query btn-video-preview" data-preview-id="${previewId}">预览视频</button>` : ""}
                     </div>
                     ${task.error ? `<div class="hint" style="margin-top:12px;color:#b91c1c;">错误信息: ${task.error}</div>` : ""}
-                    ${hasVideo ? `<video controls src="${task.video_url}"></video>` : ""}
+                    ${hasVideo ? `<video id="${previewId}" controls src="${task.video_url}" style="display:none;"></video>` : ""}
                 </article>
             `;
+        }
+
+        function toggleVideoPreview(button) {
+            const video = document.getElementById(button.dataset.previewId);
+            if (!video) return;
+            const shouldShow = video.style.display === "none";
+            video.style.display = shouldShow ? "block" : "none";
+            button.textContent = shouldShow ? "隐藏视频" : "预览视频";
+            if (!shouldShow) video.pause();
         }
 
         async function loadTasks() {
@@ -773,11 +785,14 @@
                 return;
             }
             taskList.innerHTML = data.tasks.map(taskCard).join("");
-            taskList.querySelectorAll(".btn-query").forEach((button) => {
+            taskList.querySelectorAll(".btn-query[data-id]").forEach((button) => {
                 button.addEventListener("click", () => queryTask(button.dataset.id));
             });
             taskList.querySelectorAll(".btn-video-link").forEach((button) => {
                 button.addEventListener("click", () => revealVideoUrl(button.dataset.url));
+            });
+            taskList.querySelectorAll(".btn-video-preview").forEach((button) => {
+                button.addEventListener("click", () => toggleVideoPreview(button));
             });
         }
 
@@ -845,6 +860,7 @@
             submitButton.disabled = true;
             showStatus("submitStatus", "正在提交视频任务...", "loading");
             try {
+                await saveDraft();
                 const response = await fetch("/api/video/generate", { method: "POST", body: formData });
                 const data = await response.json();
                 if (!response.ok || !data.success) throw new Error(data.message || "提交失败");

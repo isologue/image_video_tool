@@ -22,6 +22,15 @@ Thumbs.db
 # Output (not needed in image)
 output/
 uploads/
+sessions/
+
+# Local tooling / runtime
+.claude/
+*.log
+*.sqlite
+*.db
+smoke.xlsx
+smoke_output/
 
 # Git
 .git/

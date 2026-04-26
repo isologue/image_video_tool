@@ -34,6 +34,7 @@ dist/
 # IDE / OS
 .vscode/
 .idea/
+.claude/
 .DS_Store
 Thumbs.db
 
@@ -41,13 +42,24 @@ Thumbs.db
 output/
 uploads/
 sessions/
+*.sqlite
+*.db
 
 # Local debug / verification artifacts
 _check_*.html
 verify_output.png
+test_img2img_output.png
+smoke.xlsx
+smoke_output/
 
 # Logs
 *.log
+
+# Local generated binaries / archives
+*.zip
+*.tar
+*.tar.gz
+*.7z
 
 # Optional: keep if you don't want local test scratch in repo
 # debug_findings.md

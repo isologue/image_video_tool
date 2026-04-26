@@ -613,6 +613,8 @@
 <script>
 let currentSessionId = '';
         let uploadedImagesBase64 = [];
+        let draftSaveTimer = null;
+        let applyingDraft = false;
 
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -643,12 +645,100 @@ let currentSessionId = '';
             el.style.display = 'none';
         }
 
+        function setSelectValue(id, value) {
+            if (value === undefined || value === null || value === '') return;
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'SELECT' && !Array.from(el.options).some((option) => option.value === value)) {
+                el.insertAdjacentHTML('beforeend', `<option value="${value}">${value}</option>`);
+            }
+            el.value = value;
+        }
+
+        function collectGeminiDraft() {
+            return {
+                api_key: document.getElementById('api_key').value,
+                base_url: document.getElementById('base_url').value,
+                model_id: document.getElementById('model_id').value,
+                txt_prompt: document.getElementById('txt_prompt').value,
+                txt_negative: document.getElementById('txt_negative').value,
+                txt_resolution: document.getElementById('txt_resolution').value,
+                txt_aspect_ratio: document.getElementById('txt_aspect_ratio').value,
+                txt_use_last: document.getElementById('txt_use_last').checked,
+                img_prompt: document.getElementById('img_prompt').value,
+                img_negative: document.getElementById('img_negative').value,
+                img_resolution: document.getElementById('img_resolution').value,
+                img_aspect_ratio: document.getElementById('img_aspect_ratio').value,
+                uploaded_images: uploadedImagesBase64,
+            };
+        }
+
+        function applyGeminiDraft(draft = {}) {
+            applyingDraft = true;
+            document.getElementById('api_key').value = draft.api_key || '';
+            document.getElementById('base_url').value = draft.base_url || document.getElementById('base_url').value;
+            setSelectValue('model_id', draft.model_id);
+            document.getElementById('txt_prompt').value = draft.txt_prompt || '';
+            document.getElementById('txt_negative').value = draft.txt_negative || '';
+            setSelectValue('txt_resolution', draft.txt_resolution);
+            setSelectValue('txt_aspect_ratio', draft.txt_aspect_ratio);
+            document.getElementById('txt_use_last').checked = Boolean(draft.txt_use_last);
+            document.getElementById('img_prompt').value = draft.img_prompt || '';
+            document.getElementById('img_negative').value = draft.img_negative || '';
+            setSelectValue('img_resolution', draft.img_resolution);
+            setSelectValue('img_aspect_ratio', draft.img_aspect_ratio);
+            uploadedImagesBase64 = Array.isArray(draft.uploaded_images) ? draft.uploaded_images.slice(0, 4) : [];
+            renderPreviews();
+            applyingDraft = false;
+        }
+
+        async function saveGeminiDraft() {
+            if (applyingDraft) return;
+            try {
+                await fetch('/api/session', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(collectGeminiDraft())
+                });
+            } catch (e) {
+                console.error('saveGeminiDraft failed', e);
+            }
+        }
+
+        function scheduleGeminiDraftSave() {
+            if (applyingDraft) return;
+            clearTimeout(draftSaveTimer);
+            draftSaveTimer = setTimeout(saveGeminiDraft, 300);
+        }
+
+        function renderGeminiResultImages(containerId, images = []) {
+            if (!Array.isArray(images) || images.length === 0) return;
+            const container = document.getElementById(containerId);
+            const timestamp = Date.now();
+            container.innerHTML = images.map((src, index) =>
+                `<div class="image-container">
+                    <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
+                    <button class="image-download-btn" onclick="downloadImage('${src}', 'gemini_image_${index + 1}.png')">下载</button>
+                </div>`
+            ).join('');
+        }
+
+        function applyGeminiHistory(history = []) {
+            if (!Array.isArray(history)) return;
+            const latestText = history.find((item) => item && item.mode === 'text' && Array.isArray(item.images));
+            const latestImage = history.find((item) => item && item.mode === 'image' && Array.isArray(item.images));
+            if (latestText) renderGeminiResultImages('txt_result', latestText.images);
+            if (latestImage) renderGeminiResultImages('img_result', latestImage.images);
+        }
+
         async function refreshSession() {
             try {
                 const res = await fetch('/api/session');
                 const data = await res.json();
                 currentSessionId = data.session_id;
                 document.getElementById('session_id').textContent = data.session_id.substring(0, 8) + '...';
+                if (data.draft) applyGeminiDraft(data.draft);
+                if (data.history) applyGeminiHistory(data.history);
                 let statusText = [];
                 if (data.request_count > 0) statusText.push(`${data.request_count} 次请求`);
                 if (data.has_last_image) statusText.push('📁 有连续对话历史');
@@ -667,6 +757,8 @@ let currentSessionId = '';
                     alert('✅ 会话数据已清除！\n\n新会话 ID: ' + data.new_session_id.substring(0, 8) + '...');
                     document.getElementById('txt_result').innerHTML = '';
                     document.getElementById('img_result').innerHTML = '';
+                    uploadedImagesBase64 = [];
+                    renderPreviews();
                     refreshSession();
                 } else {
                     alert('❌ 清除失败：' + data.message);
@@ -780,6 +872,8 @@ let currentSessionId = '';
                     try {
                         const compressed = await compressImage(file, 800, 0.7);
                         uploadedImagesBase64.push(compressed);
+                        renderPreviews();
+                        scheduleGeminiDraftSave();
                         console.log(`压缩完成：${file.name} (${fileSizeMB}MB → 压缩后)`);
                     } catch (e) {
                         alert(`文件 ${file.name} 压缩失败：${e.message}`);
@@ -789,12 +883,14 @@ let currentSessionId = '';
                     reader.onload = (e) => {
                         uploadedImagesBase64.push(e.target.result);
                         renderPreviews();
+                        scheduleGeminiDraftSave();
                     };
                     reader.readAsDataURL(file);
                 }
             }
             
             renderPreviews();
+            scheduleGeminiDraftSave();
             input.value = '';
         }
 
@@ -813,6 +909,7 @@ let currentSessionId = '';
         function removeImage(index) {
             uploadedImagesBase64.splice(index, 1);
             renderPreviews();
+            scheduleGeminiDraftSave();
         }
 
         async function textToImage() {
@@ -834,6 +931,7 @@ let currentSessionId = '';
                 use_last_image: document.getElementById('txt_use_last').checked
             };
             try {
+                await saveGeminiDraft();
                 const res = await fetch('/api/text-to-image', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -940,6 +1038,7 @@ let currentSessionId = '';
                 image_data_list: uploadedImagesBase64
             };
             try {
+                await saveGeminiDraft();
                 const res = await fetch('/api/image-to-image', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -967,6 +1066,26 @@ let currentSessionId = '';
                 btn.textContent = '🎨 开始生成';
             }
         }
+
+        [
+            'api_key',
+            'base_url',
+            'model_id',
+            'txt_prompt',
+            'txt_negative',
+            'txt_resolution',
+            'txt_aspect_ratio',
+            'txt_use_last',
+            'img_prompt',
+            'img_negative',
+            'img_resolution',
+            'img_aspect_ratio',
+        ].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', scheduleGeminiDraftSave);
+            el.addEventListener('change', scheduleGeminiDraftSave);
+        });
 
         refreshSession();
 </script>

@@ -1,7 +1,7 @@
 services:
   gemini-image-tool:
     build: .
-    container_name: gemini-image-tool-v4
+    container_name: video-image-tool-v4
     ports:
       - "7863:7860"
     volumes:
@@ -14,4 +14,7 @@ services:
       - DEFAULT_MODEL=gemini-3.1-flash-image-preview
       - DEFAULT_VIDEO_BASE_URL=https://moai.wiki
       - DEFAULT_VIDEO_MODEL=grok-imagine-1.0-video
+      - DEFAULT_GPT_IMAGE_BASE_URL=https://moai.wiki
+      - DEFAULT_GPT_IMAGE_MODEL=gpt-image-2-flatfee
+      - DEFAULT_REQUEST_TIMEOUT=60
     restart: unless-stopped
