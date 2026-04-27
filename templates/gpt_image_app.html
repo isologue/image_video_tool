@@ -6,18 +6,18 @@
     <title>GPT 生图</title>
     <style>
         :root {
-            --bg: #07111f;
-            --bg-soft: #0d1a2d;
-            --panel: rgba(8, 16, 30, 0.9);
-            --panel-strong: rgba(12, 22, 40, 0.96);
-            --text: #edf3fb;
-            --muted: #92a2ba;
-            --line: rgba(148, 163, 184, 0.2);
-            --accent: #72f2c0;
-            --accent-2: #66b8ff;
-            --danger: #ff7b8a;
+            --bg: #0b0f20;
+            --bg-soft: #151733;
+            --panel: rgba(14, 16, 38, 0.92);
+            --panel-strong: rgba(18, 20, 46, 0.96);
+            --text: #f0ebff;
+            --muted: #a8a0c6;
+            --line: rgba(158, 138, 225, 0.22);
+            --accent: #c8abff;
+            --accent-2: #91a6ff;
+            --danger: #ff8eb3;
             --warn: #ffd36b;
-            --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+            --shadow: 0 24px 60px rgba(7, 8, 24, 0.42);
             --radius: 22px;
         }
 
@@ -29,9 +29,9 @@
             font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
             color: var(--text);
             background:
-                radial-gradient(circle at top left, rgba(102, 184, 255, 0.18), transparent 28%),
-                radial-gradient(circle at right 20%, rgba(114, 242, 192, 0.12), transparent 24%),
-                linear-gradient(135deg, #07111f, #0a1527 45%, #13233a);
+                radial-gradient(circle at top left, rgba(192, 132, 252, 0.18), transparent 28%),
+                radial-gradient(circle at right 20%, rgba(96, 165, 250, 0.12), transparent 24%),
+                linear-gradient(135deg, #070a16, #101428 45%, #171f35);
             padding: 28px;
         }
 
@@ -41,8 +41,8 @@
         }
 
         .hero {
-            background: linear-gradient(145deg, rgba(10, 19, 34, 0.95), rgba(13, 24, 43, 0.98));
-            border: 1px solid rgba(102, 184, 255, 0.18);
+            background: linear-gradient(145deg, rgba(20, 13, 36, 0.96), rgba(22, 29, 51, 0.98));
+            border: 1px solid rgba(167, 139, 250, 0.2);
             border-radius: 28px;
             box-shadow: var(--shadow);
             padding: 28px 30px;
@@ -50,14 +50,18 @@
         }
 
         .hero-top {
-            display: grid;
-            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
-            gap: 24px;
-            align-items: start;
+            display: block;
+        }
+
+        .hero-title-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
         }
 
         .hero h1 {
-            margin: 0 0 10px;
+            margin: 0;
             font-size: clamp(30px, 4vw, 44px);
             line-height: 1.05;
         }
@@ -86,25 +90,9 @@
             text-transform: uppercase;
         } */
 
-        .badge-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 18px;
-        }
-
-        .badge {
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(10, 19, 34, 0.7);
-            border: 1px solid rgba(102, 184, 255, 0.18);
-            color: #cfe8ff;
-            font-size: 13px;
-        }
-
         .session-card {
-            background: linear-gradient(160deg, rgba(13, 18, 28, 0.92), rgba(22, 29, 41, 0.86));
-            border: 1px solid rgba(96, 165, 250, 0.18);
+            background: linear-gradient(160deg, rgba(18, 15, 34, 0.94), rgba(24, 29, 52, 0.9));
+            border: 1px solid rgba(167, 139, 250, 0.18);
             border-radius: 24px;
             padding: 22px;
             min-height: 100%;
@@ -117,7 +105,7 @@
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: #7dd3fc;
+            color: #c8b5ff;
         }
 
         .session-id {
@@ -129,31 +117,6 @@
         }
 
         .session-meta {
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.7;
-        }
-
-        .workspace-card {
-            background: linear-gradient(160deg, rgba(13, 18, 28, 0.92), rgba(22, 29, 41, 0.86));
-            border: 1px solid rgba(96, 165, 250, 0.18);
-            border-radius: 24px;
-            padding: 22px;
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 14px;
-        }
-
-        .workspace-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #7dd3fc;
-        }
-
-        .workspace-copy {
             color: var(--muted);
             font-size: 13px;
             line-height: 1.7;
@@ -237,8 +200,8 @@
         }
 
         .tab {
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(158, 138, 225, 0.22);
+            background: rgba(255, 255, 255, 0.04);
             color: var(--muted);
             padding: 10px 16px;
             border-radius: 999px;
@@ -247,10 +210,11 @@
         }
 
         .tab.active {
-            color: #051018;
+            color: #140f23;
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
             border-color: transparent;
             font-weight: 700;
+            box-shadow: 0 10px 24px rgba(139, 92, 246, 0.24);
         }
 
         .tab-panel { display: none; }
@@ -263,7 +227,7 @@
             margin-bottom: 7px;
             font-size: 13px;
             font-weight: 700;
-            color: #dfe9f7;
+            color: #e7dcff;
         }
 
         input,
@@ -278,8 +242,8 @@
         textarea {
             width: 100%;
             border-radius: 14px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(158, 138, 225, 0.22);
+            background: rgba(255, 255, 255, 0.04);
             color: var(--text);
             padding: 12px 14px;
             outline: none;
@@ -287,11 +251,11 @@
 
         select {
             color-scheme: dark;
-            background-color: #0d1a2d;
+            background-color: #141730;
         }
 
         select option {
-            background: #0d1a2d;
+            background: #141730;
             color: var(--text);
         }
 
@@ -304,8 +268,8 @@
         input:focus,
         select:focus,
         textarea:focus {
-            border-color: rgba(102, 184, 255, 0.45);
-            box-shadow: 0 0 0 3px rgba(102, 184, 255, 0.12);
+            border-color: rgba(167, 139, 250, 0.46);
+            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.14);
         }
 
         .grid-2 {
@@ -347,35 +311,35 @@
 
         .btn-primary {
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            color: #06111c;
+            color: #130f22;
             font-weight: 700;
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.05);
             color: var(--text);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid rgba(167, 139, 250, 0.22);
         }
 
         .btn-secondary.active,
         .interface-mode.active {
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            color: #06111c;
+            color: #130f22;
             border-color: transparent;
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(79, 209, 197, 0.28);
+            box-shadow: 0 10px 24px rgba(139, 92, 246, 0.28);
         }
 
         .btn-danger {
-            background: rgba(255, 123, 138, 0.12);
-            color: #ffd7dc;
-            border: 1px solid rgba(255, 123, 138, 0.2);
+            background: rgba(255, 142, 179, 0.12);
+            color: #ffe2ec;
+            border: 1px solid rgba(255, 142, 179, 0.22);
         }
 
         .btn-danger-soft {
-            background: rgba(255, 123, 138, 0.08);
-            color: #ffd7dc;
-            border: 1px solid rgba(255, 123, 138, 0.16);
+            background: rgba(255, 142, 179, 0.08);
+            color: #ffe2ec;
+            border: 1px solid rgba(255, 142, 179, 0.18);
         }
 
         .btn-inline {
@@ -401,15 +365,15 @@
         }
 
         .status-box.show { display: block; }
-        .status-success { background: rgba(114, 242, 192, 0.12); border-color: rgba(114, 242, 192, 0.2); }
-        .status-error { background: rgba(255, 123, 138, 0.12); border-color: rgba(255, 123, 138, 0.2); }
-        .status-loading { background: rgba(102, 184, 255, 0.12); border-color: rgba(102, 184, 255, 0.2); }
+        .status-success { background: rgba(145, 166, 255, 0.14); border-color: rgba(145, 166, 255, 0.22); }
+        .status-error { background: rgba(255, 142, 179, 0.12); border-color: rgba(255, 142, 179, 0.2); }
+        .status-loading { background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.2); }
 
         .upload-box {
-            border: 1px dashed rgba(148, 163, 184, 0.25);
+            border: 1px dashed rgba(167, 139, 250, 0.3);
             border-radius: 18px;
             padding: 14px;
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .preview-grid,
@@ -423,7 +387,7 @@
         .preview-item,
         .image-card {
             background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(148, 163, 184, 0.14);
+            border: 1px solid rgba(167, 139, 250, 0.16);
             border-radius: 16px;
             overflow: hidden;
             position: relative;
@@ -435,7 +399,7 @@
             aspect-ratio: 1 / 1;
             object-fit: cover;
             display: block;
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .preview-item img {
@@ -598,7 +562,6 @@
         }
 
         @media (max-width: 1024px) {
-            .hero-top,
             .layout {
                 grid-template-columns: 1fr;
             }
@@ -613,6 +576,7 @@
             .hero,
             .panel-body { padding: 18px; }
             .tabs { padding: 18px 18px 0; }
+            .hero-title-row { align-items: flex-start; }
             .grid-2,
             .hero-steps {
                 grid-template-columns: 1fr;
@@ -626,21 +590,12 @@
             <div class="hero-top">
                 <div>
                     <!-- <div class="hero-kicker">GPT Image Workspace</div> -->
-                    <h1>GPT 生图工作区</h1>
-                    <!-- <p>这里单独管理 GPT 图片生成与编辑，不和 Gemini 或视频任务共享会话。支持原生模式与兼容模式切换、最近结果复用、本地结果预览，以及原生编辑最多 4 张参考图。</p> -->
-                    <div class="badge-row">
-                        <div class="badge">最多 4 张参考图</div>
-                        <div class="badge">支持原生 / 兼容模式</div>
-                        <div class="badge">会话隔离任务缓存</div>
-                        <div class="badge">支持预览下载与复用最近结果</div>
-                    </div>
-                </div>
-                <div class="workspace-card">
-                    <div class="workspace-label">Workspace</div>
-                    <!-- <div class="workspace-copy">生成入口、参考图操作和最近结果复用都保留在当前卡片工作流里；详细说明收进下面两个按钮。</div> -->
-                    <div class="hero-actions">
-                        <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
-                        <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
+                    <div class="hero-title-row">
+                        <h1>GPT 生图工作区</h1>
+                        <div class="hero-actions">
+                            <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
+                            <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
+                        </div>
                     </div>
                 </div>
             </div>

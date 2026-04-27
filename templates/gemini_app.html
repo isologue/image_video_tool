@@ -6,19 +6,19 @@
     <title>Gemini 生图</title>
     <style>
         :root {
-            --bg: #fff8fb;
-            --bg-soft: #fff1f6;
-            --panel: rgba(255, 255, 255, 0.88);
-            --panel-strong: rgba(255, 248, 251, 0.96);
-            --text: #4f2436;
-            --muted: #8d6a79;
-            --line: rgba(235, 190, 210, 0.55);
-            --accent: #f7c8da;
-            --accent-2: #fff6fa;
-            --accent-strong: #ec8fb4;
-            --danger: #d86a91;
+            --bg: #fcf9ff;
+            --bg-soft: #f4eeff;
+            --panel: rgba(255, 255, 255, 0.9);
+            --panel-strong: rgba(249, 246, 255, 0.96);
+            --text: #4c3b67;
+            --muted: #84759d;
+            --line: rgba(201, 189, 231, 0.58);
+            --accent: #e3d5ff;
+            --accent-2: #faf7ff;
+            --accent-strong: #b296ee;
+            --danger: #9c75db;
             --warn: #c97b57;
-            --shadow: 0 24px 60px rgba(214, 136, 170, 0.16);
+            --shadow: 0 24px 60px rgba(151, 123, 214, 0.16);
             --radius: 22px;
         }
 
@@ -30,9 +30,9 @@
             font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
             color: var(--text);
             background:
-                radial-gradient(circle at top left, rgba(255, 214, 230, 0.85), transparent 26%),
-                radial-gradient(circle at right 18%, rgba(255, 240, 246, 0.92), transparent 24%),
-                linear-gradient(135deg, #fffdfd, #fff5f8 42%, #fff0f5);
+                radial-gradient(circle at top left, rgba(224, 210, 255, 0.82), transparent 26%),
+                radial-gradient(circle at right 18%, rgba(243, 238, 255, 0.92), transparent 24%),
+                linear-gradient(135deg, #fffefe, #f9f6ff 42%, #f2edff);
             padding: 28px;
         }
 
@@ -44,8 +44,8 @@
         .hero {
             background:
                 radial-gradient(circle at top right, rgba(255, 255, 255, 0.78), transparent 28%),
-                linear-gradient(145deg, rgba(255, 245, 249, 0.96), rgba(255, 236, 243, 0.98));
-            border: 1px solid rgba(235, 190, 210, 0.62);
+                linear-gradient(145deg, rgba(248, 242, 255, 0.96), rgba(239, 232, 255, 0.98));
+            border: 1px solid rgba(201, 189, 231, 0.72);
             border-radius: 28px;
             box-shadow: var(--shadow);
             padding: 28px 30px;
@@ -53,17 +53,21 @@
         }
 
         .hero-top {
-            display: grid;
-            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
-            gap: 24px;
-            align-items: start;
+            display: block;
+        }
+
+        .hero-title-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
         }
 
         .hero h1 {
-            margin: 0 0 10px;
+            margin: 0;
             font-size: clamp(30px, 4vw, 44px);
             line-height: 1.05;
-            color: #59263a;
+            color: #543d7b;
         }
 
         .hero p {
@@ -74,25 +78,9 @@
             max-width: 760px;
         }
 
-        .badge-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 18px;
-        }
-
-        .badge {
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.85);
-            border: 1px solid rgba(235, 190, 210, 0.7);
-            color: #8e4b67;
-            font-size: 13px;
-        }
-
         .session-card {
-            background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(255, 244, 248, 0.96));
-            border: 1px solid rgba(235, 190, 210, 0.72);
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(246, 241, 255, 0.96));
+            border: 1px solid rgba(201, 189, 231, 0.72);
             border-radius: 24px;
             padding: 22px;
             min-height: 100%;
@@ -105,7 +93,7 @@
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: #c06a92;
+            color: #9a7ad6;
         }
 
         .session-id {
@@ -114,35 +102,10 @@
             font-weight: 700;
             line-height: 1.3;
             word-break: break-all;
-            color: #5f2a40;
+            color: #5c4783;
         }
 
         .session-meta {
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.7;
-        }
-
-        .workspace-card {
-            background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(255, 244, 248, 0.96));
-            border: 1px solid rgba(235, 190, 210, 0.72);
-            border-radius: 24px;
-            padding: 22px;
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 14px;
-        }
-
-        .workspace-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #c06a92;
-        }
-
-        .workspace-copy {
             color: var(--muted);
             font-size: 13px;
             line-height: 1.7;
@@ -219,11 +182,11 @@
         }
 
         .tab.active {
-            color: #6a2642;
+            color: #5a4482;
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            border-color: rgba(235, 190, 210, 0.9);
+            border-color: rgba(201, 189, 231, 0.92);
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(236, 143, 180, 0.18);
+            box-shadow: 0 10px 24px rgba(156, 117, 219, 0.18);
         }
 
         .tab-panel { display: none; }
@@ -236,7 +199,49 @@
             margin-bottom: 7px;
             font-size: 13px;
             font-weight: 700;
-            color: #6f3350;
+            color: #654d90;
+        }
+
+        .field-label-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 7px;
+            flex-wrap: wrap;
+        }
+
+        .field-label-row label {
+            margin-bottom: 0;
+        }
+
+        .check-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(201, 189, 231, 0.84);
+            background: rgba(255, 255, 255, 0.84);
+            color: #7258a5;
+            cursor: pointer;
+            user-select: none;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .check-chip input {
+            width: auto;
+            margin: 0;
+            accent-color: #9c75db;
+        }
+
+        .optional-field[hidden] {
+            display: none !important;
+        }
+
+        .optional-field {
+            margin-top: 12px;
         }
 
         input,
@@ -251,8 +256,8 @@
         textarea {
             width: 100%;
             border-radius: 14px;
-            border: 1px solid rgba(235, 190, 210, 0.8);
-            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(201, 189, 231, 0.84);
+            background: rgba(255, 255, 255, 0.9);
             color: var(--text);
             padding: 12px 14px;
             outline: none;
@@ -260,11 +265,11 @@
 
         select {
             color-scheme: light;
-            background-color: #fffafb;
+            background-color: #fcfaff;
         }
 
         select option {
-            background: #fffafb;
+            background: #fcfaff;
             color: var(--text);
         }
 
@@ -277,8 +282,8 @@
         input:focus,
         select:focus,
         textarea:focus {
-            border-color: rgba(236, 143, 180, 0.95);
-            box-shadow: 0 0 0 3px rgba(236, 143, 180, 0.16);
+            border-color: rgba(178, 150, 238, 0.96);
+            box-shadow: 0 0 0 3px rgba(178, 150, 238, 0.18);
         }
 
         .grid-2 {
@@ -319,36 +324,36 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #f5bed4, #fff9fb);
-            color: #6a2642;
+            background: linear-gradient(135deg, #ddd0ff, #faf7ff);
+            color: #593f87;
             font-weight: 700;
-            border: 1px solid rgba(235, 190, 210, 0.8);
+            border: 1px solid rgba(201, 189, 231, 0.84);
         }
 
         .btn-secondary {
-            background: linear-gradient(135deg, #fffdfd, #fff4f8);
-            color: #7a3853;
-            border: 1px solid rgba(235, 190, 210, 0.8);
+            background: linear-gradient(135deg, #fffefe, #f3edff);
+            color: #7358a7;
+            border: 1px solid rgba(201, 189, 231, 0.84);
         }
 
         .btn-secondary.active {
-            background: linear-gradient(135deg, #f5bed4, #fff9fb);
-            color: #6a2642;
-            border-color: rgba(235, 190, 210, 0.9);
+            background: linear-gradient(135deg, #ddd0ff, #faf7ff);
+            color: #593f87;
+            border-color: rgba(201, 189, 231, 0.92);
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(236, 143, 180, 0.18);
+            box-shadow: 0 10px 24px rgba(156, 117, 219, 0.18);
         }
 
         .btn-danger {
-            background: rgba(216, 106, 145, 0.08);
-            color: #b0436f;
-            border: 1px solid rgba(216, 106, 145, 0.18);
+            background: rgba(156, 117, 219, 0.1);
+            color: #7b5bb8;
+            border: 1px solid rgba(156, 117, 219, 0.2);
         }
 
         .btn-danger-soft {
-            background: rgba(216, 106, 145, 0.06);
-            color: #b0436f;
-            border: 1px solid rgba(216, 106, 145, 0.16);
+            background: rgba(156, 117, 219, 0.08);
+            color: #7b5bb8;
+            border: 1px solid rgba(156, 117, 219, 0.18);
         }
 
         .btn-inline {
@@ -374,15 +379,15 @@
         }
 
         .status-box.show { display: block; }
-        .status-success { background: rgba(247, 200, 218, 0.28); border-color: rgba(236, 143, 180, 0.3); }
-        .status-error { background: rgba(216, 106, 145, 0.1); border-color: rgba(216, 106, 145, 0.22); }
-        .status-loading { background: rgba(255, 239, 246, 0.72); border-color: rgba(235, 190, 210, 0.5); }
+        .status-success { background: rgba(227, 213, 255, 0.34); border-color: rgba(156, 117, 219, 0.28); }
+        .status-error { background: rgba(156, 117, 219, 0.1); border-color: rgba(156, 117, 219, 0.22); }
+        .status-loading { background: rgba(245, 239, 255, 0.78); border-color: rgba(201, 189, 231, 0.56); }
 
         .upload-box {
-            border: 1px dashed rgba(235, 190, 210, 0.9);
+            border: 1px dashed rgba(183, 163, 232, 0.9);
             border-radius: 18px;
             padding: 14px;
-            background: rgba(255, 255, 255, 0.72);
+            background: rgba(255, 255, 255, 0.76);
         }
 
         .preview-grid,
@@ -395,8 +400,8 @@
 
         .preview-item,
         .image-card {
-            background: rgba(255, 255, 255, 0.82);
-            border: 1px solid rgba(235, 190, 210, 0.65);
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(201, 189, 231, 0.68);
             border-radius: 16px;
             overflow: hidden;
             position: relative;
@@ -408,7 +413,7 @@
             aspect-ratio: 1 / 1;
             object-fit: cover;
             display: block;
-            background: rgba(255, 245, 249, 0.85);
+            background: rgba(245, 239, 255, 0.88);
         }
 
         .preview-item img {
@@ -423,7 +428,7 @@
             height: 30px;
             border: none;
             border-radius: 999px;
-            background: rgba(138, 60, 92, 0.78);
+            background: rgba(95, 71, 141, 0.82);
             color: #fff;
             cursor: pointer;
             z-index: 2;
@@ -569,7 +574,6 @@
         }
 
         @media (max-width: 1024px) {
-            .hero-top,
             .layout {
                 grid-template-columns: 1fr;
             }
@@ -584,6 +588,7 @@
             .hero,
             .panel-body { padding: 18px; }
             .tabs { padding: 18px 18px 0; }
+            .hero-title-row { align-items: flex-start; }
             .grid-2,
             .hero-steps {
                 grid-template-columns: 1fr;
@@ -596,21 +601,12 @@
         <section class="hero">
             <div class="hero-top">
                 <div>
-                    <h1>Gemini 生图工作区</h1>
-                    <!-- <p>工作区结构、交互流和输入面板按 GPT 生图页面对齐，但保留 Gemini 的接口和参数方式。未上传参考图时默认文生图，上传或复用最近结果后自动切到图生图。</p> -->
-                    <div class="badge-row">
-                        <div class="badge">最多 4 张参考图</div>
-                        <div class="badge">文生图 / 图生图合并入口</div>
-                        <div class="badge">会话隔离任务缓存</div>
-                        <div class="badge">支持预览下载与复用最近结果</div>
-                    </div>
-                </div>
-                <div class="workspace-card">
-                    <div class="workspace-label">Workspace</div>
-                    <!-- <div class="workspace-copy">文生图、图生图和最近结果复用都收在当前统一入口里；详细步骤和会话信息改到下面两个按钮里查看。</div> -->
-                    <div class="hero-actions">
-                        <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
-                        <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
+                    <div class="hero-title-row">
+                        <h1>Gemini 生图工作区</h1>
+                        <div class="hero-actions">
+                            <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
+                            <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -631,12 +627,19 @@
                             <div class="hint">这里展示当前使用的模型。修改模型请到“接口配置”。</div>
                         </div>
                         <div class="group">
-                            <label for="generatePrompt">提示词</label>
+                            <div class="field-label-row">
+                                <label for="generatePrompt">提示词</label>
+                                <label class="check-chip" for="negativePromptEnabled">
+                                    <input id="negativePromptEnabled" type="checkbox">
+                                    <span>负面提示词（可选）</span>
+                                </label>
+                            </div>
                             <textarea id="generatePrompt" placeholder="例如：樱花树下的白色机甲少女，电影级柔光，细节丰富，背景干净。"></textarea>
-                        </div>
-                        <div class="group">
-                            <label for="negativePrompt">负面提示词</label>
-                            <textarea id="negativePrompt" placeholder="例如：低清晰度、结构错误、手部异常、重复元素、模糊。"></textarea>
+                            <div class="optional-field" id="negativePromptWrap" hidden>
+                                <label for="negativePrompt">负面提示词</label>
+                                <textarea id="negativePrompt" placeholder="例如：低清晰度、结构错误、手部异常、重复元素、模糊。"></textarea>
+                                <div class="hint">留空则不会额外发送负面提示词。</div>
+                            </div>
                         </div>
                         <div class="grid-2">
                             <div class="group">
@@ -672,7 +675,7 @@
                             <div class="group">
                                 <label for="continueMode">最近结果续写</label>
                                 <input id="continueMode" type="text" value="未启用" readonly>
-                                <div class="hint">当你点击“使用最近结果”后，这里会切到最近结果复用模式。</div>
+                                <!-- <div class="hint">当你点击“使用最近结果”后，这里会切到最近结果复用模式。</div> -->
                             </div>
                         </div>
                         <button type="button" class="btn-primary" id="generateButton">开始生成图片</button>
@@ -861,6 +864,9 @@
         const pickEditImageButton = document.getElementById('pickEditImageButtonTop');
         const useLastImageButton = document.getElementById('useLastImageButtonTop');
         const clearEditImageButton = document.getElementById('clearEditImageButtonTop');
+        const negativePromptToggle = document.getElementById('negativePromptEnabled');
+        const negativePromptInput = document.getElementById('negativePrompt');
+        const negativePromptWrap = document.getElementById('negativePromptWrap');
 
         tabs.forEach((tab) => {
             tab.addEventListener('click', () => {
@@ -887,7 +893,7 @@
             const referenceGroup = editImageInput?.closest('.group');
             const promptGroup = document.getElementById('generatePrompt')?.closest('.group');
             if (referenceGroup && promptGroup && referenceGroup.parentElement !== generatePanel) {
-                promptGroup.insertAdjacentElement('beforebegin', referenceGroup);
+                promptGroup.insertAdjacentElement('afterend', referenceGroup);
             }
 
             const workflowButton = document.getElementById('generateButton');
@@ -924,10 +930,15 @@
             return state.useLastImage || state.editImages.length > 0;
         }
 
+        function syncNegativePromptField() {
+            if (!negativePromptToggle || !negativePromptWrap) return;
+            negativePromptWrap.hidden = !negativePromptToggle.checked;
+        }
+
         function getWorkflowValues() {
             return {
                 prompt: document.getElementById('generatePrompt').value.trim(),
-                negative_prompt: document.getElementById('negativePrompt').value.trim(),
+                negative_prompt: negativePromptToggle?.checked ? negativePromptInput.value.trim() : '',
                 resolution: document.getElementById('generateSize').value,
                 aspect_ratio: document.getElementById('generateAspectRatio').value,
                 image_count: Number(document.getElementById('generateCount').value),
@@ -1083,6 +1094,10 @@
             document.getElementById('modelInput').value = draft.model_id || document.getElementById('modelInput').value;
             document.getElementById('generatePrompt').value = promptValue;
             document.getElementById('negativePrompt').value = negativeValue;
+            if (negativePromptToggle) {
+                negativePromptToggle.checked = Boolean(negativeValue);
+                syncNegativePromptField();
+            }
             setSelectValue('generateSize', resolutionValue);
             setSelectValue('generateAspectRatio', aspectRatioValue);
             setSelectValue('generateCount', countValue);
@@ -1531,6 +1546,12 @@
         editImageInput.addEventListener('change', handleEditImageSelect);
         useLastImageButton.addEventListener('click', useLastGeneratedImage);
         clearEditImageButton.addEventListener('click', clearEditImage);
+        if (negativePromptToggle) {
+            negativePromptToggle.addEventListener('change', () => {
+                syncNegativePromptField();
+                scheduleGeminiDraftSave();
+            });
+        }
         document.getElementById('refreshSessionButton').addEventListener('click', refreshGeminiSession);
         document.getElementById('refreshResultsButton').addEventListener('click', refreshGeminiSession);
         document.getElementById('clearSessionButton').addEventListener('click', clearGeminiSession);
@@ -1567,6 +1588,7 @@
         updateModelOptions(['{{ default_model }}']);
         syncModelDisplays();
         setupUnifiedWorkflowPanel();
+        syncNegativePromptField();
         refreshGeminiSession();
     </script>
 </body>

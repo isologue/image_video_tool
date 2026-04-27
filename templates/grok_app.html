@@ -56,14 +56,18 @@
         }
 
         .hero-grid {
-            display: grid;
-            grid-template-columns: 1.6fr 1fr;
-            gap: 20px;
-            align-items: end;
+            display: block;
+        }
+
+        .hero-title-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
         }
 
         .hero h1 {
-            margin: 0 0 10px;
+            margin: 0;
             font-size: clamp(30px, 4vw, 44px);
             line-height: 1.05;
         }
@@ -91,16 +95,6 @@
             text-transform: uppercase;
         }
 
-        .badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-        .badge {
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(125, 211, 252, 0.18);
-            font-size: 13px;
-            color: #bfe7ff;
-        }
-
         .session-card {
             background: linear-gradient(160deg, rgba(13,18,28,0.92), rgba(22,29,41,0.86));
             border: 1px solid rgba(96, 165, 250, 0.18);
@@ -112,18 +106,6 @@
         .session-id { margin: 10px 0 8px; font-family: Consolas, monospace; font-size: 15px; word-break: break-all; }
         .session-meta { color: var(--muted); font-size: 13px; }
 
-        .workspace-card {
-            background: linear-gradient(160deg, rgba(13,18,28,0.92), rgba(22,29,41,0.86));
-            border: 1px solid rgba(96, 165, 250, 0.18);
-            border-radius: 24px;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 14px;
-        }
-        .workspace-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7dd3fc; }
-        .workspace-copy { color: var(--muted); font-size: 13px; line-height: 1.7; }
         .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
         .layout {
@@ -386,13 +368,14 @@
             .hero-grid, .layout, .grid-2, .meta-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 980px) {
-            .hero-grid, .layout, .workflow-strip { grid-template-columns: 1fr; }
+            .layout, .workflow-strip { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 640px) {
             body { padding: 16px; }
             .hero { padding: 22px 18px; border-radius: 24px; }
             .panel-body { padding: 18px; }
+            .hero-title-row { align-items: flex-start; }
             .grid-2 { grid-template-columns: 1fr; }
             .actions { flex-direction: column; }
         }
@@ -403,21 +386,12 @@
         <section class="hero">
             <div class="hero-grid">
                 <div>
-                    <h1>GROK视频生成</h1>
-                    <!-- <p>基于 Flask + Docker 的视频生成站点，接入 `https://moai.wiki` 视频接口。支持提示词、参考图、尺寸、时长、质量配置，以及会话级任务列表与单任务进度查询。</p> -->
-                    <div class="badge-row">
-                        <div class="badge">最多 4 张参考图</div>
-                        <div class="badge">图片不可大于10MB</div>
-                        <div class="badge">会话隔离任务缓存</div>
-                        <div class="badge">完成后可直接预览视频</div>
-                    </div>
-                </div>
-                <div class="workspace-card">
-                    <div class="workspace-label">Workspace</div>
-                    <!-- <div class="workspace-copy">视频生成、参考图上传和任务列表都保留在当前工作区里；详细步骤和会话信息改成按钮弹窗查看。</div> -->
-                    <div class="hero-actions">
-                        <button type="button" class="btn-secondary" id="openStepsDialogButton">使用步骤</button>
-                        <button type="button" class="btn-secondary" id="openSessionDialogButton">Session 信息</button>
+                    <div class="hero-title-row">
+                        <h1>GROK视频生成</h1>
+                        <div class="hero-actions">
+                            <button type="button" class="btn-secondary" id="openStepsDialogButton">使用步骤</button>
+                            <button type="button" class="btn-secondary" id="openSessionDialogButton">Session 信息</button>
+                        </div>
                     </div>
                 </div>
                 <!-- <div class="workspace-note">这一轮主要是整理页面承接和产品感，核心视频接口逻辑保持不动。</div> -->

@@ -1,6 +1,8 @@
 services:
-  gemini-image-tool:
-    build: .
+  video-image-tool:
+    # image: video-image-tool-v4:latest
+    # build: .
+    image: milodk/video-image-tool-v4:latest
     container_name: video-image-tool-v4
     ports:
       - "7863:7860"
