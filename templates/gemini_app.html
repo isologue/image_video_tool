@@ -3,646 +3,1051 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini画图</title>
+    <title>Gemini 生图</title>
     <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --pink-50: #fff5f7;
-            --pink-100: #fff0f5;
-            --pink-200: #ffe4ec;
-            --pink-300: #fbcfe8;
-            --pink-500: #f472b6;
-            --pink-700: #be185d;
-            --pink-900: #831843;
-            --slate-500: #64748b;
-            --slate-700: #334155;
-            --line-soft: rgba(190, 24, 93, 0.08);
-            --shadow-soft: 0 18px 50px rgba(244, 114, 182, 0.10);
+            --bg: #fff8fb;
+            --bg-soft: #fff1f6;
+            --panel: rgba(255, 255, 255, 0.88);
+            --panel-strong: rgba(255, 248, 251, 0.96);
+            --text: #4f2436;
+            --muted: #8d6a79;
+            --line: rgba(235, 190, 210, 0.55);
+            --accent: #f7c8da;
+            --accent-2: #fff6fa;
+            --accent-strong: #ec8fb4;
+            --danger: #d86a91;
+            --warn: #c97b57;
+            --shadow: 0 24px 60px rgba(214, 136, 170, 0.16);
+            --radius: 22px;
         }
+
+        * { box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #ffffff 0%, #fff5f7 100%);
+            margin: 0;
             min-height: 100vh;
-            padding: 20px;
-            color: #1e293b;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.94);
-            border-radius: 22px;
-            box-shadow: var(--shadow-soft);
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.8);
-            backdrop-filter: blur(12px);
-        }
-        header {
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--text);
             background:
-                radial-gradient(circle at top right, rgba(244,114,182,0.16), transparent 26%),
-                linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
-            color: var(--pink-700);
-            padding: 30px;
-            text-align: left;
-            border-bottom: 1px solid rgba(190, 24, 93, 0.06);
+                radial-gradient(circle at top left, rgba(255, 214, 230, 0.85), transparent 26%),
+                radial-gradient(circle at right 18%, rgba(255, 240, 246, 0.92), transparent 24%),
+                linear-gradient(135deg, #fffdfd, #fff5f8 42%, #fff0f5);
+            padding: 28px;
         }
-        .header-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
+
+        .shell {
+            max-width: 1320px;
+            margin: 0 auto;
         }
-        .header-copy h1 { font-size: 30px; margin-bottom: 8px; }
-        .header-copy p { opacity: 0.9; max-width: 760px; line-height: 1.7; }
-        .header-badge {
-            white-space: nowrap;
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.78);
-            border: 1px solid rgba(190, 24, 93, 0.08);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: .04em;
-            text-transform: uppercase;
-            color: var(--pink-700);
+
+        .hero {
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.78), transparent 28%),
+                linear-gradient(145deg, rgba(255, 245, 249, 0.96), rgba(255, 236, 243, 0.98));
+            border: 1px solid rgba(235, 190, 210, 0.62);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            padding: 28px 30px;
+            margin-bottom: 22px;
         }
-        .hero-points {
+
+        .hero-top {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+            gap: 24px;
+            align-items: start;
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-size: clamp(30px, 4vw, 44px);
+            line-height: 1.05;
+            color: #59263a;
+        }
+
+        .hero p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.7;
+            font-size: 15px;
+            max-width: 760px;
+        }
+
+        .badge-row {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             margin-top: 18px;
         }
-        .hero-chip {
-            padding: 8px 12px;
+
+        .badge {
+            padding: 10px 14px;
             border-radius: 999px;
-            background: rgba(255,255,255,0.75);
-            border: 1px solid rgba(190, 24, 93, 0.08);
-            font-size: 12px;
-            color: var(--pink-700);
-        }
-        
-        /* Session 信息栏 */
-        .session-bar {
-            background: linear-gradient(135deg, #f8fbff 0%, #eef8ff 100%);
-            border: 1px solid #bae6fd;
-            border-radius: 14px;
-            padding: 14px 18px;
-            margin: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(235, 190, 210, 0.7);
+            color: #8e4b67;
             font-size: 13px;
-            box-shadow: 0 10px 24px rgba(14, 165, 233, 0.06);
-        }
-        .session-info {
-            color: #0369a1;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .session-id {
-            font-family: monospace;
-            background: #e0f2fe;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }
-        .session-actions {
-            display: flex;
-            gap: 10px;
-        }
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 12px;
-            width: auto;
-        }
-        .btn-danger {
-            background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
-            color: #991b1b;
-            border-color: #fecaca;
-        }
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%);
-        }
-        
-        .tabs {
-            display: flex;
-            gap: 10px;
-            border-bottom: none;
-            padding: 0 20px 20px;
-        }
-        .tab {
-            flex: 1;
-            padding: 15px 18px;
-            text-align: center;
-            cursor: pointer;
-            border: 1px solid rgba(190, 24, 93, 0.08);
-            background: #fff;
-            font-size: 15px;
-            color: var(--slate-500);
-            transition: all 0.25s;
-            border-radius: 14px;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-        }
-        .tab:hover { background: #fff7fa; color: var(--pink-700); }
-        .tab.active {
-            color: var(--pink-700);
-            background: linear-gradient(135deg, #fff0f5 0%, #ffe4ec 100%);
-            border-color: rgba(244, 114, 182, 0.18);
-            font-weight: 700;
-            transform: translateY(-1px);
-        }
-        .tab-content { display: none; padding: 10px 30px 30px; }
-        .tab-content.active { display: block; }
-        .form-group { margin-bottom: 20px; }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #333;
-        }
-        input[type="text"], input[type="password"], textarea, select {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: #f9a8d4;
-        }
-        textarea { resize: vertical; min-height: 80px; }
-        .row { display: flex; gap: 20px; }
-        .col { flex: 1; }
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .checkbox-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-        button {
-            background: linear-gradient(135deg, #fff0f5 0%, #f9a8d4 100%);
-            color: #831843;
-            border: 2px solid #fbcfe8;
-            padding: 14px 32px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            width: 100%;
-        }
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(249, 168, 212, 0.3);
-            background: linear-gradient(135deg, #ffe4ec 0%, #fbcfe8 100%);
-        }
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
-        }
-        .btn-secondary:hover {
-            background: #e0e0e0;
-            box-shadow: none;
-        }
-        .result-area {
-            margin-top: 30px;
-            padding: 22px;
-            background: linear-gradient(180deg, #fffefe 0%, #fff7fa 100%);
-            border-radius: 16px;
-            min-height: 200px;
-            border: 1px solid rgba(190, 24, 93, 0.06);
-        }
-        .result-image {
-            max-width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .status {
-            margin-top: 16px;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        .status.success { background: #fff5f7; color: #be185d; border: 1px solid #fbcfe8; }
-        .status.error { background: #fff5f5; color: #dc2626; border: 1px solid #fecaca; }
-        .status.loading { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-        .image-preview {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-            margin-top: 10px;
-        }
-        .accordion {
-            border: 1px solid #fbcfe8;
-            border-radius: 8px;
-            margin: 20px;
-            overflow: hidden;
-        }
-        .accordion-header {
-            padding: 14px 20px;
-            background: #fff5f7;
-            cursor: pointer;
-            font-weight: 500;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: #be185d;
-        }
-        .accordion-header:hover { background: #fff0f5; }
-        .accordion-content {
-            padding: 20px;
-            display: none;
-        }
-        .accordion-content.show { display: block; }
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 20px;
-        }
-        .gallery img {
-            width: 100%;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .gallery img:hover { transform: scale(1.02); }
-        .image-preview-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-            gap: 12px;
-            margin-top: 14px;
-        }
-        .preview-item {
-            position: relative;
-            aspect-ratio: 1;
-            border-radius: 14px;
-            overflow: hidden;
-            background: linear-gradient(180deg, #fff7fa 0%, #fff0f5 100%);
-            border: 1px solid rgba(190, 24, 93, 0.10);
-            box-shadow: 0 8px 20px rgba(244, 114, 182, 0.08);
-        }
-        .preview-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .remove-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.9);
-            background: rgba(15, 23, 42, 0.78);
-            color: #fff;
-            font-size: 18px;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
-        }
-        .remove-btn:hover {
-            transform: none;
-            background: rgba(190, 24, 93, 0.92);
-            box-shadow: 0 8px 18px rgba(190, 24, 93, 0.22);
-        }
-        .upload-hint {
-            margin-top: 10px;
-            font-size: 13px;
-            line-height: 1.6;
-            color: var(--slate-500);
-        }
-        
-        /* 图片放大查看器 */
-        .lightbox {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-        .lightbox.active { display: flex; }
-        .lightbox img {
-            max-width: 90%;
-            max-height: 80vh;
-            border-radius: 8px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-        }
-        .lightbox-close {
-            position: absolute;
-            top: 20px;
-            right: 30px;
-            font-size: 40px;
-            color: white;
-            cursor: pointer;
-            background: none;
-            border: none;
-            padding: 0;
-            width: auto;
-        }
-        .lightbox-close:hover { color: #f9a8d4; }
-        .lightbox-download {
-            margin-top: 20px;
-            padding: 12px 32px;
-            background: linear-gradient(135deg, #fff0f5 0%, #f9a8d4 100%);
-            color: #831843;
-            border: 2px solid #fbcfe8;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .lightbox-download:hover {
-            background: linear-gradient(135deg, #ffe4ec 0%, #fbcfe8 100%);
-        }
-        
-        /* 图片容器添加下载按钮 */
-        .image-container {
-            position: relative;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
-        .image-container img {
-            max-width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            cursor: pointer;
-        }
-        .image-download-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(255, 255, 255, 0.95);
-            border: 1px solid #fbcfe8;
-            border-radius: 6px;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 14px;
-            color: #be185d;
-            transition: all 0.2s;
-            display: none;
-        }
-        .image-container:hover .image-download-btn { display: block; }
-        .image-download-btn:hover {
-            background: #f9a8d4;
-            color: white;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 20px;
-            color: #be185d;
-            font-size: 14px;
-            background: #fff5f7;
-            border-top: 1px solid #fbcfe8;
         }
 
-        .section-note {
-            margin: 0 30px 24px;
-            padding: 14px 16px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, rgba(255,240,245,.8), rgba(255,255,255,.96));
-            border: 1px solid rgba(190, 24, 93, 0.08);
-            color: var(--slate-700);
+        .session-card {
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(255, 244, 248, 0.96));
+            border: 1px solid rgba(235, 190, 210, 0.72);
+            border-radius: 24px;
+            padding: 22px;
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .session-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #c06a92;
+        }
+
+        .session-id {
+            margin: 12px 0 10px;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1.3;
+            word-break: break-all;
+            color: #5f2a40;
+        }
+
+        .session-meta {
+            color: var(--muted);
             font-size: 13px;
             line-height: 1.7;
         }
-        .section-note strong { color: var(--pink-700); }
-        @media (max-width: 768px) {
-            body { padding: 12px; }
-            .header-top, .session-bar, .row, .tabs {
-                flex-direction: column;
-            }
-            .session-actions { width: 100%; }
-            .btn-sm { width: 100%; }
-            .tab-content { padding: 0 18px 24px; }
-            .section-note { margin: 0 18px 20px; }
-            header, .session-bar, .accordion { margin-left: 0; margin-right: 0; }
+
+        .workspace-card {
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.88), rgba(255, 244, 248, 0.96));
+            border: 1px solid rgba(235, 190, 210, 0.72);
+            border-radius: 24px;
+            padding: 22px;
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 14px;
         }
 
+        .workspace-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #c06a92;
+        }
+
+        .workspace-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .hero-steps {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 22px;
+        }
+
+        .step-card {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(235, 190, 210, 0.55);
+            border-radius: 20px;
+            padding: 18px;
+        }
+
+        .step-card strong {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #7a3853;
+        }
+
+        .step-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+            gap: 22px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+        }
+
+        .panel-body {
+            padding: 22px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            padding: 22px 22px 0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            border: 1px solid rgba(235, 190, 210, 0.72);
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--muted);
+            padding: 10px 16px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .tab.active {
+            color: #6a2642;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            border-color: rgba(235, 190, 210, 0.9);
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(236, 143, 180, 0.18);
+        }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .group { margin-bottom: 16px; }
+
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #6f3350;
+        }
+
+        input,
+        select,
+        textarea,
+        button {
+            font: inherit;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            border-radius: 14px;
+            border: 1px solid rgba(235, 190, 210, 0.8);
+            background: rgba(255, 255, 255, 0.88);
+            color: var(--text);
+            padding: 12px 14px;
+            outline: none;
+        }
+
+        select {
+            color-scheme: light;
+            background-color: #fffafb;
+        }
+
+        select option {
+            background: #fffafb;
+            color: var(--text);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 110px;
+            line-height: 1.6;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: rgba(236, 143, 180, 0.95);
+            box-shadow: 0 0 0 3px rgba(236, 143, 180, 0.16);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .stack-actions,
+        .actions,
+        .side-header {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .side-header {
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .btn-primary,
+        .btn-secondary,
+        .btn-danger {
+            border: none;
+            border-radius: 14px;
+            padding: 11px 16px;
+            cursor: pointer;
+            transition: transform 0.18s ease, opacity 0.18s ease;
+        }
+
+        .btn-primary:disabled,
+        .btn-secondary:disabled,
+        .btn-danger:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #f5bed4, #fff9fb);
+            color: #6a2642;
+            font-weight: 700;
+            border: 1px solid rgba(235, 190, 210, 0.8);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #fffdfd, #fff4f8);
+            color: #7a3853;
+            border: 1px solid rgba(235, 190, 210, 0.8);
+        }
+
+        .btn-secondary.active {
+            background: linear-gradient(135deg, #f5bed4, #fff9fb);
+            color: #6a2642;
+            border-color: rgba(235, 190, 210, 0.9);
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(236, 143, 180, 0.18);
+        }
+
+        .btn-danger {
+            background: rgba(216, 106, 145, 0.08);
+            color: #b0436f;
+            border: 1px solid rgba(216, 106, 145, 0.18);
+        }
+
+        .btn-danger-soft {
+            background: rgba(216, 106, 145, 0.06);
+            color: #b0436f;
+            border: 1px solid rgba(216, 106, 145, 0.16);
+        }
+
+        .btn-inline {
+            padding: 9px 14px;
+            border-radius: 999px;
+        }
+
+        .hint {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .status-box {
+            display: none;
+            margin-top: 14px;
+            border-radius: 14px;
+            padding: 12px 14px;
+            line-height: 1.6;
+            font-size: 13px;
+            border: 1px solid transparent;
+        }
+
+        .status-box.show { display: block; }
+        .status-success { background: rgba(247, 200, 218, 0.28); border-color: rgba(236, 143, 180, 0.3); }
+        .status-error { background: rgba(216, 106, 145, 0.1); border-color: rgba(216, 106, 145, 0.22); }
+        .status-loading { background: rgba(255, 239, 246, 0.72); border-color: rgba(235, 190, 210, 0.5); }
+
+        .upload-box {
+            border: 1px dashed rgba(235, 190, 210, 0.9);
+            border-radius: 18px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .preview-grid,
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .preview-item,
+        .image-card {
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(235, 190, 210, 0.65);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .preview-item img,
+        .image-card img {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            display: block;
+            background: rgba(255, 245, 249, 0.85);
+        }
+
+        .preview-item img {
+            cursor: zoom-in;
+        }
+
+        .preview-remove {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 999px;
+            background: rgba(138, 60, 92, 0.78);
+            color: #fff;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .group:has(#editImageInputLegacy) {
+            display: none;
+        }
+
+        .preview-meta,
+        .image-actions {
+            padding: 10px 12px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .image-card img {
+            cursor: zoom-in;
+        }
+
+        .empty {
+            border: 1px dashed rgba(235, 190, 210, 0.9);
+            border-radius: 18px;
+            padding: 24px;
+            color: var(--muted);
+            text-align: center;
+            line-height: 1.7;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(60, 22, 38, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 20;
+        }
+
+        .lightbox.active { display: flex; }
+
+        .lightbox-inner {
+            width: min(96vw, 1100px);
+            background: rgba(255, 251, 252, 0.98);
+            border: 1px solid rgba(235, 190, 210, 0.8);
+            border-radius: 22px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: var(--shadow);
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text);
+            cursor: pointer;
+            z-index: 1;
+        }
+
+        .lightbox img {
+            width: 100%;
+            max-height: 76vh;
+            object-fit: contain;
+            display: block;
+            background: #fff7fb;
+        }
+
+        .lightbox-bar {
+            padding: 14px 16px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .info-dialog {
+            position: fixed;
+            inset: 0;
+            background: rgba(60, 22, 38, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 21;
+        }
+
+        .info-dialog.active { display: flex; }
+
+        .info-dialog-panel {
+            width: min(92vw, 560px);
+            background: rgba(255, 251, 252, 0.98);
+            border: 1px solid rgba(235, 190, 210, 0.8);
+            border-radius: 22px;
+            padding: 24px;
+            position: relative;
+            box-shadow: var(--shadow);
+        }
+
+        .info-dialog-panel h3 {
+            margin: 0 0 14px;
+            font-size: 20px;
+            color: #59263a;
+        }
+
+        .info-dialog-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .info-list {
+            display: grid;
+            gap: 14px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .info-list strong,
+        .info-session strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #59263a;
+        }
+
+        .info-session {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        @media (max-width: 1024px) {
+            .hero-top,
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-steps {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 720px) {
+            body { padding: 16px; }
+            .hero,
+            .panel-body { padding: 18px; }
+            .tabs { padding: 18px 18px 0; }
+            .grid-2,
+            .hero-steps {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="container">
-        <header>
-            <h1>🎨 Gemini画图</h1>
-            <p>支持文生图和多参考图生图 · 最多 4 张参考图 · 数据隔离</p>
-        </header>
-        <div class="session-bar">
-            <div class="session-info">
-                <span>🔐 当前会话：</span>
-                <span class="session-id" id="session_id">加载中...</span>
-                <span id="session_status" style="margin-left: 10px; opacity: 0.7;"></span>
-            </div>
-            <div class="session-actions">
-                <button class="btn-sm btn-secondary" onclick="refreshSession()">🔄 刷新状态</button>
-                <button class="btn-sm btn-danger" onclick="clearSession()">🗑️ 清除我的数据</button>
-            </div>
-        </div>
-        <!-- <div class="section-note"><strong>使用建议：</strong>先确认接口配置，再切到对应标签页执行任务。这一轮主要打磨的是信息层级、页面节奏和移动端观感，不改核心生成逻辑。</div> -->
-        <div class="tabs">
-            <button class="tab active" data-tab="text2img">📝 文生图</button>
-            <button class="tab" data-tab="img2img">🖼️ 图生图</button>
-        </div>
-        <div class="accordion">
-            <div class="accordion-header" onclick="toggleAccordion(this)">
-                🔑 API 配置 <span>▼</span>
-            </div>
-            <div class="accordion-content show">
-                <div class="row">
-                    <div class="col">
-                        <div class="form-group">
-                            <label>API Key</label>
-                            <input type="password" id="api_key" placeholder="填入你的中转站 API Key">
-                        </div>
-                    </div>
-                    <div class="col">
-                        <div class="form-group">
-                            <label>Base URL (中转站地址)</label>
-                            <input type="text" id="base_url" value="{{ default_base_url }}" placeholder="例如：https://your-proxy.com/v1beta">
-                        </div>
+    <div class="shell">
+        <section class="hero">
+            <div class="hero-top">
+                <div>
+                    <h1>Gemini 生图工作区</h1>
+                    <!-- <p>工作区结构、交互流和输入面板按 GPT 生图页面对齐，但保留 Gemini 的接口和参数方式。未上传参考图时默认文生图，上传或复用最近结果后自动切到图生图。</p> -->
+                    <div class="badge-row">
+                        <div class="badge">最多 4 张参考图</div>
+                        <div class="badge">文生图 / 图生图合并入口</div>
+                        <div class="badge">会话隔离任务缓存</div>
+                        <div class="badge">支持预览下载与复用最近结果</div>
                     </div>
                 </div>
-                <div class="row">
-                    <div class="col">
-                        <button class="btn-secondary" onclick="testConnection()">🔌 测试连接</button>
-                    </div>
-                    <div class="col">
-                        <button class="btn-secondary" onclick="fetchModels()">📋 获取模型列表</button>
-                    </div>
-                </div>
-                <div id="connection_status" class="status" style="display:none; margin-top:10px;"></div>
-                <div class="form-group" style="margin-top:15px;">
-                    <label>模型 ID</label>
-                    <select id="model_id">
-                        <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                        <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp-image-generation</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-        <div class="tab-content active" id="text2img">
-            <div class="row">
-                <div class="col">
-                    <div class="form-group">
-                        <label>提示词</label>
-                        <textarea id="txt_prompt" placeholder="描述你想要生成的图片，例如：一只可爱的猫咪在草地上晒太阳"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>负面提示词（可选）</label>
-                        <textarea id="txt_negative" placeholder="描述你不想要的内容，例如：模糊、低质量"></textarea>
-                    </div>
-                    <div class="form-group checkbox-group">
-                        <input type="checkbox" id="txt_use_last">
-                        <label for="txt_use_last" style="margin:0;">🔄 基于上一张图编辑（连续对话）</label>
-                    </div>
-                    <div class="form-group">
-                        <label>分辨率</label>
-                        <select id="txt_resolution">
-                            <option value="512 (512x512)">512 (0.5K)</option>
-                            <option value="1K (1024x1024)" selected>1K (1024x1024)</option>
-                            <option value="2K (2048x2048)">2K (2048x2048)</option>
-                            <option value="4K (4096x4096)">4K (4096x4096)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>图片比例</label>
-                        <select id="txt_aspect_ratio">
-                            <option value="1:1">1:1（正方形）</option>
-                            <option value="16:9">16:9（横屏）</option>
-                            <option value="9:16">9:16（竖屏）</option>
-                            <option value="4:3">4:3</option>
-                            <option value="3:4">3:4</option>
-                        </select>
-                    </div>
-                    <button id="txt_btn" onclick="textToImage()">🎨 开始生成</button>
-                </div>
-                <div class="col">
-                    <div class="result-area">
-                        <label>生成结果</label>
-                        <div class="hint" style="margin-bottom:12px;">生成成功后会显示在这里，点击图片可放大查看。</div>
-                        <div id="txt_result"><div class="hint">还没有图片，先输入提示词再开始生成。</div></div>
-                        <div id="txt_status"></div>
+                <div class="workspace-card">
+                    <div class="workspace-label">Workspace</div>
+                    <!-- <div class="workspace-copy">文生图、图生图和最近结果复用都收在当前统一入口里；详细步骤和会话信息改到下面两个按钮里查看。</div> -->
+                    <div class="hero-actions">
+                        <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
+                        <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="tab-content" id="img2img">
-            <div class="row">
-                <div class="col">
-                    <div class="form-group">
-                        <label>参考图片（最多 4 张）</label>
-                        <input type="file" id="img_input" accept="image/*" multiple onchange="previewImages(this)" style="display:none;">
-                        <button type="button" class="btn-secondary" onclick="document.getElementById('img_input').click()" style="width:auto; padding:10px 20px;">📁 选择图片</button>
-                        <p class="upload-hint">支持多选，最多 4 张。已选择：<span id="img_count">0</span>/4</p>
-                        <div id="img_preview_container" class="image-preview-container"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>提示词</label>
-                        <textarea id="img_prompt" placeholder="描述你想要如何修改这张图片"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>负面提示词（可选）</label>
-                        <textarea id="img_negative" placeholder="描述你不想要的内容"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>分辨率</label>
-                        <select id="img_resolution">
-                            <option value="512 (512x512)">512 (0.5K)</option>
-                            <option value="1K (1024x1024)" selected>1K (1024x1024)</option>
-                            <option value="2K (2048x2048)">2K (2048x2048)</option>
-                            <option value="4K (4096x4096)">4K (4096x4096)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>图片比例</label>
-                        <select id="img_aspect_ratio">
-                            <option value="1:1">1:1（正方形）</option>
-                            <option value="16:9">16:9（横屏）</option>
-                            <option value="9:16">9:16（竖屏）</option>
-                            <option value="4:3">4:3</option>
-                            <option value="3:4">3:4</option>
-                        </select>
-                    </div>
-                    <button id="img_btn" onclick="imageToImage()">🎨 开始生成</button>
-                </div>
-                <div class="col">
-                    <div class="result-area">
-                        <label>生成结果</label>
-                        <div class="hint" style="margin-bottom:12px;">上传参考图并填写提示词后，生成结果会显示在这里。</div>
-                        <div id="img_result"><div class="hint">还没有结果，先选择参考图片再开始生成。</div></div>
-                        <div id="img_status"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <footer>
-            Made with 🐾 by Moai · v4 
-        </footer>
-    </div>
-    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
-        <button class="lightbox-close" onclick="closeLightbox(event)">&times;</button>
-        <img id="lightbox-img" src="" alt="放大图片">
-        <a id="lightbox-download" class="lightbox-download" download>⬇️ 下载图片</a>
-    </div>
-<script>
-let currentSessionId = '';
-        let uploadedImagesBase64 = [];
-        let draftSaveTimer = null;
-        let applyingDraft = false;
+        </section>
 
-        document.querySelectorAll('.tab').forEach(tab => {
+        <section class="layout">
+            <div class="panel">
+                <div class="tabs">
+                    <button class="tab active" data-tab="generatePanel">文生图</button>
+                    <button class="tab" data-tab="editPanel">编辑图</button>
+                    <button class="tab" data-tab="configPanel">接口配置</button>
+                </div>
+                <div class="panel-body">
+                    <div class="tab-panel active" id="generatePanel">
+                        <div class="group" style="display:none">
+                            <label for="generateModelDisplay">模型 ID</label>
+                            <input id="generateModelDisplay" type="text" value="{{ default_model }}" readonly>
+                            <div class="hint">这里展示当前使用的模型。修改模型请到“接口配置”。</div>
+                        </div>
+                        <div class="group">
+                            <label for="generatePrompt">提示词</label>
+                            <textarea id="generatePrompt" placeholder="例如：樱花树下的白色机甲少女，电影级柔光，细节丰富，背景干净。"></textarea>
+                        </div>
+                        <div class="group">
+                            <label for="negativePrompt">负面提示词</label>
+                            <textarea id="negativePrompt" placeholder="例如：低清晰度、结构错误、手部异常、重复元素、模糊。"></textarea>
+                        </div>
+                        <div class="grid-2">
+                            <div class="group">
+                                <label for="generateSize">基础尺寸</label>
+                                <select id="generateSize">
+                                    <option value="512 (512x512)">512 / 0.5K</option>
+                                    <option value="1K (1024x1024)" selected>1K</option>
+                                    <option value="2K (2048x2048)">2K</option>
+                                    <option value="4K (4096x4096)">4K / 最大档</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label for="generateAspectRatio">画面比例</label>
+                                <select id="generateAspectRatio">
+                                    <option value="1:1">1:1 方图</option>
+                                    <option value="16:9">16:9 横图</option>
+                                    <option value="9:16">9:16 竖图</option>
+                                    <option value="4:3">4:3 横图</option>
+                                    <option value="3:4">3:4 竖图</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid-2">
+                            <div class="group">
+                                <label for="generateCount">生成数量</label>
+                                <select id="generateCount">
+                                    <option value="1">1 张</option>
+                                    <option value="2">2 张</option>
+                                    <option value="3">3 张</option>
+                                    <option value="4">4 张</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label for="continueMode">最近结果续写</label>
+                                <input id="continueMode" type="text" value="未启用" readonly>
+                                <div class="hint">当你点击“使用最近结果”后，这里会切到最近结果复用模式。</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-primary" id="generateButton">开始生成图片</button>
+                        <div class="status-box" id="generateStatus"></div>
+                    </div>
+
+                    <div class="tab-panel" id="editPanel">
+                        <div class="group">
+                            <label for="editModelDisplay">模型 ID</label>
+                            <input id="editModelDisplay" type="text" value="{{ default_model }}" readonly>
+                            <div class="hint">编辑图会使用接口配置中的模型。</div>
+                        </div>
+                        <div class="group">
+                            <label>参考图</label>
+                            <div class="upload-box">
+                                <input id="editImageInputTop" type="file" accept="image/*" multiple hidden>
+                                <div class="actions">
+                                    <button type="button" class="btn-secondary btn-inline" id="pickEditImageButtonTop">选择参考图</button>
+                                    <button type="button" class="btn-secondary btn-inline" id="useLastImageButtonTop">使用最近结果</button>
+                                    <button type="button" class="btn-danger btn-inline" id="clearEditImageButtonTop">清空当前选择</button>
+                                </div>
+                                <div class="preview-grid" id="editPreviewGrid"></div>
+                            </div>
+                        </div>
+                        <div class="group">
+                            <label for="editPrompt">编辑提示词</label>
+                            <textarea id="editPrompt" placeholder="例如：保留主体构图，把背景改成柔和的樱花庭院，整体更精致。"></textarea>
+                        </div>
+                        <div class="grid-2">
+                            <div class="group">
+                                <label for="editSize">输出尺寸</label>
+                                <select id="editSize">
+                                    <option value="512 (512x512)">512 / 0.5K</option>
+                                    <option value="1K (1024x1024)" selected>1K</option>
+                                    <option value="2K (2048x2048)">2K</option>
+                                    <option value="4K (4096x4096)">4K / 最大档</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label for="editAspectRatio">画面比例</label>
+                                <select id="editAspectRatio">
+                                    <option value="1:1">1:1 方图</option>
+                                    <option value="16:9">16:9 横图</option>
+                                    <option value="9:16">9:16 竖图</option>
+                                    <option value="4:3">4:3 横图</option>
+                                    <option value="3:4">3:4 竖图</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid-2">
+                            <div class="group">
+                                <label for="editCount">生成数量</label>
+                                <select id="editCount">
+                                    <option value="1">1 张</option>
+                                    <option value="2">2 张</option>
+                                    <option value="3">3 张</option>
+                                    <option value="4">4 张</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label for="editNegativePrompt">负面提示词</label>
+                                <input id="editNegativePrompt" type="text" placeholder="可选：低清晰度、变形、重复">
+                                <div class="hint">支持最多 4 张参考图；可分多次追加上传，也可以直接复用最近结果。</div>
+                            </div>
+                        </div>
+                        <div class="group">
+                            <label>参考图</label>
+                            <div class="upload-box">
+                                <input id="editImageInputLegacy" type="file" accept="image/*" multiple hidden>
+                                <div class="actions">
+                                    <button type="button" class="btn-secondary btn-inline" id="pickEditImageButtonLegacy">选择参考图</button>
+                                    <button type="button" class="btn-secondary btn-inline" id="useLastImageButtonLegacy">使用最近结果</button>
+                                    <button type="button" class="btn-danger btn-inline" id="clearEditImageButtonLegacy">清空当前选择</button>
+                                </div>
+                                <div class="preview-grid" id="editPreviewGridLegacy"></div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-primary" id="editButton">开始编辑图片</button>
+                        <div class="status-box" id="editStatus"></div>
+                    </div>
+
+                    <div class="tab-panel" id="configPanel">
+                        <div class="group">
+                            <label for="apiKey">API Key</label>
+                            <input id="apiKey" type="password" placeholder="请输入 API Key">
+                        </div>
+                        <div class="group">
+                            <label for="baseUrl">Base URL</label>
+                            <input id="baseUrl" type="text" value="{{ default_base_url }}" placeholder="https://moai.wiki">
+                        </div>
+                        <div class="group">
+                            <label for="modelInput">模型 ID</label>
+                            <input id="modelInput" type="text" value="{{ default_model }}" placeholder="例如：gemini-2.5-flash-image">
+                            <select id="modelSelect" style="margin-top: 10px;">
+                                <option value="">从已获取模型中选择</option>
+                                <option value="{{ default_model }}">{{ default_model }}</option>
+                            </select>
+                            <div class="hint">支持手动输入，也可以先获取模型列表再选择。</div>
+                        </div>
+                        <div class="stack-actions">
+                            <button type="button" class="btn-secondary" id="testConnectionButton">测试连接</button>
+                            <button type="button" class="btn-secondary" id="fetchModelsButton">获取模型列表</button>
+                            <button type="button" class="btn-secondary" id="refreshSessionButton">刷新会话状态</button>
+                            <button type="button" class="btn-danger" id="clearSessionButton">清空当前 Gemini 数据</button>
+                        </div>
+                        <div class="status-box" id="configStatus"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-body">
+                    <div class="side-header">
+                        <div>
+                            <h2 style="margin: 0 0 6px;">最近结果</h2>
+                            <div class="hint" style="margin: 0;">仅展示当前 Gemini 会话的本地图片结果。</div>
+                        </div>
+                        <button type="button" class="btn-secondary" id="refreshResultsButton">刷新结果</button>
+                    </div>
+
+                    <div id="resultContainer" class="empty">当前还没有图片结果。先在左侧发起一次生成或编辑。</div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+        <div class="lightbox-inner">
+            <button type="button" class="lightbox-close" onclick="closeLightbox(event)">×</button>
+            <img id="lightboxImg" src="" alt="预览图片">
+            <div class="lightbox-bar">
+                <button type="button" class="btn-secondary btn-inline" id="lightboxDownload">下载图片</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-dialog" id="stepsDialog" onclick="closeInfoDialog(event)">
+        <div class="info-dialog-panel">
+            <button type="button" class="info-dialog-close" onclick="closeInfoDialog(event)">×</button>
+            <h3>使用步骤</h3>
+            <div class="info-list">
+                <div>
+                    <strong>1. 配参数</strong>
+                    <div>先填写 `API Key`、`Base URL`、模型和提示词；参考图最多支持 4 张。</div>
+                </div>
+                <div>
+                    <strong>2. 提交任务</strong>
+                    <div>没有参考图时走文生图；上传参考图或复用最近结果后会自动切到图生图接口。</div>
+                </div>
+                <div>
+                    <strong>3. 看结果</strong>
+                    <div>右侧展示当前会话结果，支持预览、下载、删除和继续复用。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-dialog" id="sessionDialog" onclick="closeInfoDialog(event)">
+        <div class="info-dialog-panel">
+            <button type="button" class="info-dialog-close" onclick="closeInfoDialog(event)">×</button>
+            <h3>Session 信息</h3>
+            <div class="info-session">
+                <strong>当前会话 ID</strong>
+                <div class="session-id" id="sessionIdText">{{ session_id }}</div>
+                <div class="session-meta" id="sessionMetaText">当前浏览器会话会独立保存 Gemini 生图记录。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        const state = {
+            editImages: [],
+            useLastImage: false,
+            lastImageUrl: '',
+            history: [],
+            saveTimer: null,
+            applyingDraft: false,
+        };
+        const generateTabButton = document.querySelector('.tab[data-tab="generatePanel"]');
+        const editTabButton = document.querySelector('.tab[data-tab="editPanel"]');
+        const generatePanel = document.getElementById('generatePanel');
+        const editPanel = document.getElementById('editPanel');
+        const editImageInput = document.getElementById('editImageInputTop');
+        const pickEditImageButton = document.getElementById('pickEditImageButtonTop');
+        const useLastImageButton = document.getElementById('useLastImageButtonTop');
+        const clearEditImageButton = document.getElementById('clearEditImageButtonTop');
+
+        tabs.forEach((tab) => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tabs.forEach((node) => node.classList.remove('active'));
+                tabPanels.forEach((panel) => panel.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById(tab.dataset.tab).classList.add('active');
             });
         });
 
-        function toggleAccordion(header) {
-            const content = header.nextElementSibling;
-            content.classList.toggle('show');
-            header.querySelector('span').textContent = content.classList.contains('show') ? '▼' : '▶';
+        function setupUnifiedWorkflowPanel() {
+            if (generateTabButton) {
+                generateTabButton.textContent = '生成工作流';
+            }
+            if (editTabButton) {
+                editTabButton.style.display = 'none';
+                editTabButton.disabled = true;
+            }
+            if (editPanel) {
+                editPanel.classList.remove('active');
+                editPanel.style.display = 'none';
+            }
+
+            const referenceGroup = editImageInput?.closest('.group');
+            const promptGroup = document.getElementById('generatePrompt')?.closest('.group');
+            if (referenceGroup && promptGroup && referenceGroup.parentElement !== generatePanel) {
+                promptGroup.insertAdjacentElement('beforebegin', referenceGroup);
+            }
+
+            const workflowButton = document.getElementById('generateButton');
+            if (workflowButton) {
+                workflowButton.textContent = '开始生成';
+            }
         }
 
-        function showStatus(elementId, message, type) {
-            const el = document.getElementById(elementId);
+        function showStatus(id, message, type) {
+            const el = document.getElementById(id);
             el.textContent = message;
-            el.className = 'status ' + type;
-            el.style.display = 'block';
+            el.className = `status-box show status-${type}`;
         }
 
-        function resetStatus(elementId) {
-            const el = document.getElementById(elementId);
+        function resetStatus(id) {
+            const el = document.getElementById(id);
             el.textContent = '';
-            el.className = 'status';
-            el.style.display = 'none';
+            el.className = 'status-box';
+        }
+
+        function getConfig() {
+            return {
+                api_key: document.getElementById('apiKey').value.trim(),
+                base_url: document.getElementById('baseUrl').value.trim(),
+                model_id: document.getElementById('modelInput').value.trim(),
+            };
+        }
+
+        function getWorkflowStatusId() {
+            return 'generateStatus';
+        }
+
+        function hasWorkflowReferences() {
+            return state.useLastImage || state.editImages.length > 0;
+        }
+
+        function getWorkflowValues() {
+            return {
+                prompt: document.getElementById('generatePrompt').value.trim(),
+                negative_prompt: document.getElementById('negativePrompt').value.trim(),
+                resolution: document.getElementById('generateSize').value,
+                aspect_ratio: document.getElementById('generateAspectRatio').value,
+                image_count: Number(document.getElementById('generateCount').value),
+            };
+        }
+
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function compressReferenceFile(file, maxSizeKB = 4096, maxDimension = 1600) {
+            const raw = await fileToDataURL(file);
+            return new Promise((resolve) => {
+                const image = new Image();
+                image.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = image.width;
+                    let height = image.height;
+                    if (Math.max(width, height) > maxDimension) {
+                        const ratio = maxDimension / Math.max(width, height);
+                        width = Math.max(1, Math.floor(width * ratio));
+                        height = Math.max(1, Math.floor(height * ratio));
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+                    let quality = 0.9;
+                    let dataURL = canvas.toDataURL('image/jpeg', quality);
+                    while (dataURL.length / 1024 > maxSizeKB && quality > 0.2) {
+                        quality -= 0.1;
+                        dataURL = canvas.toDataURL('image/jpeg', quality);
+                    }
+                    resolve(dataURL);
+                };
+                image.onerror = () => resolve(raw);
+                image.src = raw;
+            });
+        }
+
+        async function imageUrlToDataURL(url) {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function collectGeminiDraft() {
+            const workflow = getWorkflowValues();
+            return {
+                api_key: document.getElementById('apiKey').value.trim(),
+                base_url: document.getElementById('baseUrl').value.trim(),
+                model_id: document.getElementById('modelInput').value.trim(),
+                txt_prompt: workflow.prompt,
+                txt_negative: workflow.negative_prompt,
+                txt_resolution: workflow.resolution,
+                txt_aspect_ratio: workflow.aspect_ratio,
+                txt_use_last: state.useLastImage,
+                img_prompt: workflow.prompt,
+                img_negative: workflow.negative_prompt,
+                img_resolution: workflow.resolution,
+                img_aspect_ratio: workflow.aspect_ratio,
+                uploaded_images: state.editImages.slice(0, 4),
+                generate_count: String(workflow.image_count),
+            };
+        }
+
+        async function saveGeminiDraft() {
+            if (state.applyingDraft) return;
+            try {
+                const draft = await collectGeminiDraft();
+                await fetch('/api/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(draft),
+                });
+            } catch (error) {
+                console.error('saveGeminiDraft failed', error);
+            }
+        }
+
+        function scheduleGeminiDraftSave() {
+            if (state.applyingDraft) return;
+            clearTimeout(state.saveTimer);
+            state.saveTimer = setTimeout(saveGeminiDraft, 300);
+        }
+
+        function syncModelDisplays() {
+            const value = document.getElementById('modelInput').value.trim();
+            document.getElementById('generateModelDisplay').value = value;
+            document.getElementById('editModelDisplay').value = value;
+            const select = document.getElementById('modelSelect');
+            if (Array.from(select.options).some((option) => option.value === value)) {
+                select.value = value;
+            } else {
+                select.value = '';
+            }
+        }
+
+        function updateModelOptions(models) {
+            const select = document.getElementById('modelSelect');
+            const values = Array.from(new Set(
+                (Array.isArray(models) ? models : [])
+                    .map((item) => String(item || '').trim())
+                    .filter(Boolean)
+            ));
+            if (!values.includes('{{ default_model }}')) {
+                values.unshift('{{ default_model }}');
+            }
+            select.innerHTML = ['<option value="">从已获取模型中选择</option>']
+                .concat(values.map((item) => `<option value="${item}">${item}</option>`))
+                .join('');
         }
 
         function setSelectValue(id, value) {
@@ -655,333 +1060,263 @@ let currentSessionId = '';
             el.value = value;
         }
 
-        function collectGeminiDraft() {
-            return {
-                api_key: document.getElementById('api_key').value,
-                base_url: document.getElementById('base_url').value,
-                model_id: document.getElementById('model_id').value,
-                txt_prompt: document.getElementById('txt_prompt').value,
-                txt_negative: document.getElementById('txt_negative').value,
-                txt_resolution: document.getElementById('txt_resolution').value,
-                txt_aspect_ratio: document.getElementById('txt_aspect_ratio').value,
-                txt_use_last: document.getElementById('txt_use_last').checked,
-                img_prompt: document.getElementById('img_prompt').value,
-                img_negative: document.getElementById('img_negative').value,
-                img_resolution: document.getElementById('img_resolution').value,
-                img_aspect_ratio: document.getElementById('img_aspect_ratio').value,
-                uploaded_images: uploadedImagesBase64,
-            };
-        }
-
         function applyGeminiDraft(draft = {}) {
-            applyingDraft = true;
-            document.getElementById('api_key').value = draft.api_key || '';
-            document.getElementById('base_url').value = draft.base_url || document.getElementById('base_url').value;
-            setSelectValue('model_id', draft.model_id);
-            document.getElementById('txt_prompt').value = draft.txt_prompt || '';
-            document.getElementById('txt_negative').value = draft.txt_negative || '';
-            setSelectValue('txt_resolution', draft.txt_resolution);
-            setSelectValue('txt_aspect_ratio', draft.txt_aspect_ratio);
-            document.getElementById('txt_use_last').checked = Boolean(draft.txt_use_last);
-            document.getElementById('img_prompt').value = draft.img_prompt || '';
-            document.getElementById('img_negative').value = draft.img_negative || '';
-            setSelectValue('img_resolution', draft.img_resolution);
-            setSelectValue('img_aspect_ratio', draft.img_aspect_ratio);
-            uploadedImagesBase64 = Array.isArray(draft.uploaded_images) ? draft.uploaded_images.slice(0, 4) : [];
-            renderPreviews();
-            applyingDraft = false;
+            state.applyingDraft = true;
+            const preferEditDraft = Boolean(draft.txt_use_last)
+                || (Array.isArray(draft.uploaded_images) && draft.uploaded_images.length > 0);
+            const promptValue = preferEditDraft
+                ? (draft.img_prompt || draft.txt_prompt || '')
+                : (draft.txt_prompt || draft.img_prompt || '');
+            const negativeValue = preferEditDraft
+                ? (draft.img_negative || draft.txt_negative || '')
+                : (draft.txt_negative || draft.img_negative || '');
+            const resolutionValue = preferEditDraft
+                ? (draft.img_resolution || draft.txt_resolution)
+                : (draft.txt_resolution || draft.img_resolution);
+            const aspectRatioValue = preferEditDraft
+                ? (draft.img_aspect_ratio || draft.txt_aspect_ratio)
+                : (draft.txt_aspect_ratio || draft.img_aspect_ratio);
+            const countValue = draft.generate_count || '1';
+
+            document.getElementById('apiKey').value = draft.api_key || '';
+            document.getElementById('baseUrl').value = draft.base_url || document.getElementById('baseUrl').value;
+            document.getElementById('modelInput').value = draft.model_id || document.getElementById('modelInput').value;
+            document.getElementById('generatePrompt').value = promptValue;
+            document.getElementById('negativePrompt').value = negativeValue;
+            setSelectValue('generateSize', resolutionValue);
+            setSelectValue('generateAspectRatio', aspectRatioValue);
+            setSelectValue('generateCount', countValue);
+            document.getElementById('editPrompt').value = promptValue;
+            document.getElementById('editNegativePrompt').value = negativeValue;
+            setSelectValue('editSize', resolutionValue);
+            setSelectValue('editAspectRatio', aspectRatioValue);
+            setSelectValue('editCount', countValue);
+            state.editImages = Array.isArray(draft.uploaded_images) ? draft.uploaded_images.slice(0, 4) : [];
+            state.useLastImage = Boolean(draft.txt_use_last) && Boolean(state.lastImageUrl) && state.editImages.length === 0;
+            syncModelDisplays();
+            renderEditPreview();
+            state.applyingDraft = false;
         }
 
-        async function saveGeminiDraft() {
-            if (applyingDraft) return;
-            try {
-                await fetch('/api/session', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(collectGeminiDraft())
-                });
-            } catch (e) {
-                console.error('saveGeminiDraft failed', e);
-            }
-        }
+        function updateWorkflowModeHint() {
+            const referenceGroup = editImageInput?.closest('.group');
+            if (!referenceGroup) return;
 
-        function scheduleGeminiDraftSave() {
-            if (applyingDraft) return;
-            clearTimeout(draftSaveTimer);
-            draftSaveTimer = setTimeout(saveGeminiDraft, 300);
-        }
-
-        function renderGeminiResultImages(containerId, images = []) {
-            if (!Array.isArray(images) || images.length === 0) return;
-            const container = document.getElementById(containerId);
-            const timestamp = Date.now();
-            container.innerHTML = images.map((src, index) =>
-                `<div class="image-container">
-                    <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
-                    <button class="image-download-btn" onclick="downloadImage('${src}', 'gemini_image_${index + 1}.png')">下载</button>
-                </div>`
-            ).join('');
-        }
-
-        function applyGeminiHistory(history = []) {
-            if (!Array.isArray(history)) return;
-            const latestText = history.find((item) => item && item.mode === 'text' && Array.isArray(item.images));
-            const latestImage = history.find((item) => item && item.mode === 'image' && Array.isArray(item.images));
-            if (latestText) renderGeminiResultImages('txt_result', latestText.images);
-            if (latestImage) renderGeminiResultImages('img_result', latestImage.images);
-        }
-
-        async function refreshSession() {
-            try {
-                const res = await fetch('/api/session');
-                const data = await res.json();
-                currentSessionId = data.session_id;
-                document.getElementById('session_id').textContent = data.session_id.substring(0, 8) + '...';
-                if (data.draft) applyGeminiDraft(data.draft);
-                if (data.history) applyGeminiHistory(data.history);
-                let statusText = [];
-                if (data.request_count > 0) statusText.push(`${data.request_count} 次请求`);
-                if (data.has_last_image) statusText.push('📁 有连续对话历史');
-                document.getElementById('session_status').textContent = statusText.join(' · ') || '新会话';
-            } catch (e) {
-                document.getElementById('session_id').textContent = '获取失败';
-            }
-        }
-
-        async function clearSession() {
-            if (!confirm('确定要清除当前会话的所有数据吗？\n\n这将删除：\n- 所有生成的图片\n- 连续对话历史\n\n此操作不可恢复！')) return;
-            try {
-                const res = await fetch('/api/session/clear', { method: 'POST' });
-                const data = await res.json();
-                if (data.success) {
-                    alert('✅ 会话数据已清除！\n\n新会话 ID: ' + data.new_session_id.substring(0, 8) + '...');
-                    document.getElementById('txt_result').innerHTML = '';
-                    document.getElementById('img_result').innerHTML = '';
-                    uploadedImagesBase64 = [];
-                    renderPreviews();
-                    refreshSession();
+            let hint = referenceGroup.querySelector('[data-workflow-mode-hint]');
+            if (!hint) {
+                hint = document.createElement('div');
+                hint.className = 'hint';
+                hint.dataset.workflowModeHint = 'true';
+                const actions = referenceGroup.querySelector('.actions');
+                if (actions) {
+                    actions.insertAdjacentElement('afterend', hint);
                 } else {
-                    alert('❌ 清除失败：' + data.message);
+                    referenceGroup.appendChild(hint);
                 }
-            } catch (e) {
-                alert('❌ 清除失败：' + e.message);
             }
-        }
 
-        async function testConnection() {
-            const api_key = document.getElementById('api_key').value;
-            const base_url = document.getElementById('base_url').value;
-            const statusEl = document.getElementById('connection_status');
-            statusEl.style.display = 'block';
-            statusEl.className = 'status loading';
-            statusEl.textContent = '测试中...';
-            try {
-                const res = await fetch('/api/test', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({api_key, base_url})
-                });
-                const data = await res.json();
-                statusEl.className = 'status ' + (data.success ? 'success' : 'error');
-                statusEl.textContent = data.message;
-            } catch (e) {
-                statusEl.className = 'status error';
-                statusEl.textContent = '错误：' + e.message;
-            }
-        }
-
-        async function fetchModels() {
-            const api_key = document.getElementById('api_key').value;
-            const base_url = document.getElementById('base_url').value;
-            const statusEl = document.getElementById('connection_status');
-            statusEl.style.display = 'block';
-            statusEl.className = 'status loading';
-            statusEl.textContent = '获取中...';
-            try {
-                const res = await fetch('/api/models', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({api_key, base_url})
-                });
-                const data = await res.json();
-                if (data.error) {
-                    statusEl.className = 'status error';
-                    statusEl.textContent = data.error;
-                } else {
-                    const select = document.getElementById('model_id');
-                    select.innerHTML = data.models.map(m => `<option value="${m}">${m}</option>`).join('');
-                    statusEl.className = 'status success';
-                    statusEl.textContent = `找到 ${data.models.length} 个模型`;
-                }
-            } catch (e) {
-                statusEl.className = 'status error';
-                statusEl.textContent = '错误：' + e.message;
-            }
-        }
-
-        // 压缩图片到指定大小
-        function compressImage(file, maxSize = 800, quality = 0.7) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    // 等比例缩放
-                    if (Math.max(width, height) > maxSize) {
-                        const ratio = maxSize / Math.max(width, height);
-                        width = Math.floor(width * ratio);
-                        height = Math.floor(height * ratio);
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // 压缩为 JPEG
-                    canvas.toBlob((blob) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    }, 'image/jpeg', quality);
-                };
-                img.src = URL.createObjectURL(file);
-            });
-        }
-
-        async function previewImages(input) {
-            const files = input.files;
-            const countSpan = document.getElementById('img_count');
-            
-            if (files.length + uploadedImagesBase64.length > 4) {
-                alert('最多只能上传 4 张图片！');
-                input.value = '';
+            const continueModeInput = document.getElementById('continueMode');
+            if (state.useLastImage && state.lastImageUrl) {
+                hint.textContent = '当前模式：图生图，提交时会把最近结果转成参考图一起发送。';
+                continueModeInput.value = '已启用';
                 return;
             }
-            
-            // 检查文件大小并压缩
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-                
-                // 如果文件大于 2MB，先压缩
-                if (file.size > 2 * 1024 * 1024) {
-                    console.log(`文件 ${file.name} 太大 (${fileSizeMB}MB)，正在压缩...`);
-                    try {
-                        const compressed = await compressImage(file, 800, 0.7);
-                        uploadedImagesBase64.push(compressed);
-                        renderPreviews();
-                        scheduleGeminiDraftSave();
-                        console.log(`压缩完成：${file.name} (${fileSizeMB}MB → 压缩后)`);
-                    } catch (e) {
-                        alert(`文件 ${file.name} 压缩失败：${e.message}`);
-                    }
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        uploadedImagesBase64.push(e.target.result);
-                        renderPreviews();
-                        scheduleGeminiDraftSave();
-                    };
-                    reader.readAsDataURL(file);
-                }
+            if (state.editImages.length > 0) {
+                hint.textContent = `当前模式：图生图，已选择 ${state.editImages.length} 张参考图，提交时会走图生图接口。`;
+                continueModeInput.value = '未启用';
+                return;
             }
-            
-            renderPreviews();
-            scheduleGeminiDraftSave();
-            input.value = '';
+            hint.textContent = '当前模式：文生图。未上传参考图时，提交会直接走文生图接口。';
+            continueModeInput.value = '未启用';
         }
 
-        function renderPreviews() {
-            const container = document.getElementById('img_preview_container');
-            const countSpan = document.getElementById('img_count');
-            countSpan.textContent = uploadedImagesBase64.length;
-            container.innerHTML = uploadedImagesBase64.map((src, index) => `
-                <div class="preview-item">
-                    <img src="${src}">
-                    <button class="remove-btn" onclick="removeImage(${index})">×</button>
+        function renderEditPreview() {
+            const container = document.getElementById('editPreviewGrid');
+            if (state.useLastImage && state.lastImageUrl) {
+                container.innerHTML = `
+                    <div class="preview-item">
+                        <img src="${state.lastImageUrl}?t=${Date.now()}" alt="recent-result" onclick="openLightbox('${state.lastImageUrl}')">
+                        <div class="preview-meta">当前使用：最近结果</div>
+                    </div>
+                `;
+                updateWorkflowModeHint();
+                return;
+            }
+            if (state.editImages.length) {
+                container.innerHTML = state.editImages.map((src, index) => `
+                    <div class="preview-item">
+                        <button type="button" class="preview-remove" onclick="removeEditImage(${index}, event)">×</button>
+                        <img src="${src}" alt="reference-${index + 1}" onclick="openLightbox('${src}')">
+                        <div class="preview-meta">参考图 ${index + 1}</div>
+                    </div>
+                `).join('');
+                updateWorkflowModeHint();
+                return;
+            }
+            container.innerHTML = '<div class="empty">当前没有参考图。你可以上传 1 到 4 张图片，或者直接复用最近结果。</div>';
+            updateWorkflowModeHint();
+        }
+
+        function clearEditImage(save = true) {
+            state.editImages = [];
+            state.useLastImage = false;
+            editImageInput.value = '';
+            renderEditPreview();
+            if (save !== false) scheduleGeminiDraftSave();
+        }
+
+        async function handleEditImageSelect(event) {
+            const incomingFiles = Array.from(event.target.files || []);
+            if (!incomingFiles.length) return;
+            showStatus(getWorkflowStatusId(), '正在压缩并保存参考图草稿...', 'loading');
+            const compressedImages = [];
+            for (const file of incomingFiles) {
+                compressedImages.push(await compressReferenceFile(file));
+            }
+            const nextImages = [];
+            const seen = new Set();
+            const appendImage = (src) => {
+                const key = String(src || '').slice(0, 120);
+                if (!src || seen.has(key) || nextImages.length >= 4) return;
+                seen.add(key);
+                nextImages.push(src);
+            };
+            state.editImages.forEach((src) => appendImage(src));
+            compressedImages.forEach((src) => appendImage(src));
+            state.useLastImage = false;
+            state.editImages = nextImages;
+            event.target.value = '';
+            renderEditPreview();
+            resetStatus(getWorkflowStatusId());
+            scheduleGeminiDraftSave();
+        }
+
+        function removeEditImage(index, event) {
+            if (event) event.stopPropagation();
+            if (index < 0 || index >= state.editImages.length) return;
+            state.editImages.splice(index, 1);
+            state.useLastImage = false;
+            editImageInput.value = '';
+            renderEditPreview();
+            scheduleGeminiDraftSave();
+        }
+
+        function useLastGeneratedImage() {
+            if (!state.lastImageUrl) {
+                showStatus(getWorkflowStatusId(), '当前会话没有最近结果可复用。', 'error');
+                return;
+            }
+            resetStatus(getWorkflowStatusId());
+            state.editImages = [];
+            state.useLastImage = true;
+            editImageInput.value = '';
+            renderEditPreview();
+            scheduleGeminiDraftSave();
+        }
+
+        function setBusy(buttonId, busy, loadingText, idleText) {
+            const button = document.getElementById(buttonId);
+            button.disabled = busy;
+            button.textContent = busy ? loadingText : idleText;
+        }
+
+        function renderResultImages(images = []) {
+            const container = document.getElementById('resultContainer');
+            if (!Array.isArray(images) || images.length === 0) {
+                container.className = 'empty';
+                container.innerHTML = '当前还没有图片结果。先在左侧发起一次生成或编辑。';
+                return;
+            }
+            container.className = 'gallery';
+            const timestamp = Date.now();
+            container.innerHTML = images.map((src, index) => `
+                <div class="image-card">
+                    <img src="${src}?t=${timestamp}" alt="result-${index + 1}" onclick="openLightbox('${src}')">
+                    <div class="image-actions">
+                        <button type="button" class="btn-secondary" onclick="downloadImage(event, '${src}', 'gemini_image_${index + 1}.png')">下载</button>
+                        <button type="button" class="btn-secondary btn-danger-soft" onclick="deleteResultImage(event, '${src}')">删除</button>
+                    </div>
                 </div>
             `).join('');
         }
 
-        function removeImage(index) {
-            uploadedImagesBase64.splice(index, 1);
-            renderPreviews();
-            scheduleGeminiDraftSave();
+        async function deleteResultImage(event, src) {
+            if (event) event.stopPropagation();
+            if (!src) return;
+            if (!confirm('确定要删除这张图片吗？')) return;
+
+            try {
+                const response = await fetch('/api/gemini-image/result', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: src }),
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    showStatus('configStatus', result.message || '删除失败', 'error');
+                    return;
+                }
+                showStatus('configStatus', result.message || '图片已删除', 'success');
+                await refreshGeminiSession();
+            } catch (error) {
+                showStatus('configStatus', `删除失败：${error.message}`, 'error');
+            }
         }
 
-        async function textToImage() {
-            const btn = document.getElementById('txt_btn');
-            btn.disabled = true;
-            btn.textContent = '⏳ 正在生成，请稍候';
-            resetStatus('txt_status');
-            const resultContainer = document.getElementById('txt_result');
-            resultContainer.innerHTML = '<div class="hint">正在生成中，结果出来后会显示在这里。</div>';
-            const data = {
-                api_key: document.getElementById('api_key').value,
-                base_url: document.getElementById('base_url').value,
-                model_id: document.getElementById('model_id').value,
-                prompt: document.getElementById('txt_prompt').value,
-                negative_prompt: document.getElementById('txt_negative').value,
-                image_count: 1,
-                resolution: document.getElementById('txt_resolution').value,
-                aspect_ratio: document.getElementById('txt_aspect_ratio').value,
-                use_last_image: document.getElementById('txt_use_last').checked
-            };
-            try {
-                await saveGeminiDraft();
-                const res = await fetch('/api/text-to-image', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                const result = await res.json();
-                if (result.success) {
-                    const container = document.getElementById('txt_result');
-                    const timestamp = new Date().getTime();
-                    container.innerHTML = result.images.map((src, index) => 
-                        `<div class="image-container">
-                            <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
-                            <button class="image-download-btn" onclick="downloadImage('${src}', 'image_${index + 1}.png')">⬇️ 下载</button>
-                        </div>`
-                    ).join('');
-                    showStatus('txt_status', result.message, 'success');
-                    refreshSession();
-                } else {
-                    showStatus('txt_status', result.message, 'error');
-                }
-            } catch (e) {
-                showStatus('txt_status', '错误：' + e.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🎨 开始生成';
+        function collectHistoryImages(history = [], fallbackImageUrl = '') {
+            if (!Array.isArray(history) || history.length === 0) {
+                return fallbackImageUrl ? [fallbackImageUrl] : [];
             }
+
+            const images = [];
+            history.forEach((entry) => {
+                if (!entry || !Array.isArray(entry.images)) return;
+                entry.images.forEach((src) => {
+                    if (src) images.push(src);
+                });
+            });
+            return images;
         }
 
         function openLightbox(src) {
             const lightbox = document.getElementById('lightbox');
-            const lightboxImg = document.getElementById('lightbox-img');
-            const downloadLink = document.getElementById('lightbox-download');
-            const cleanSrc = src.split('&t=')[0];
-            lightboxImg.src = src;
-            downloadLink.href = cleanSrc;
-            downloadLink.download = 'gemini_image_' + new Date().getTime() + '.png';
+            const previewSrc = src.startsWith('blob:') || src.startsWith('data:')
+                ? src
+                : `${src}?t=${Date.now()}`;
+            document.getElementById('lightboxImg').src = previewSrc;
+            document.getElementById('lightboxDownload').onclick = (event) => downloadImage(event, src, `gemini_image_${Date.now()}.png`);
             lightbox.classList.add('active');
             document.body.style.overflow = 'hidden';
         }
 
         function closeLightbox(event) {
-            if (event.target.id === 'lightbox' || event.target.classList.contains('lightbox-close')) {
-                const lightbox = document.getElementById('lightbox');
-                lightbox.classList.remove('active');
+            if (!event || event.target.id === 'lightbox' || event.target.classList.contains('lightbox-close')) {
+                document.getElementById('lightbox').classList.remove('active');
                 document.body.style.overflow = '';
             }
         }
 
-        async function downloadImage(src, filename) {
-            event.stopPropagation();
+        function openInfoDialog(id) {
+            const dialog = document.getElementById(id);
+            if (!dialog) return;
+            dialog.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeInfoDialog(event) {
+            if (!event) return;
+            const target = event.target;
+            if (!target) return;
+            if (target.classList.contains('info-dialog') || target.classList.contains('info-dialog-close')) {
+                target.closest('.info-dialog').classList.remove('active');
+                if (!document.getElementById('lightbox').classList.contains('active')) {
+                    document.body.style.overflow = '';
+                }
+            }
+        }
+
+        async function downloadImage(event, src, filename) {
+            if (event) event.stopPropagation();
             try {
                 const response = await fetch(src);
                 const blob = await response.blob();
@@ -993,7 +1328,7 @@ let currentSessionId = '';
                 a.click();
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
-            } catch (e) {
+            } catch (error) {
                 const a = document.createElement('a');
                 a.href = src;
                 a.download = filename;
@@ -1004,90 +1339,235 @@ let currentSessionId = '';
             }
         }
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                const lightbox = document.getElementById('lightbox');
-                if (lightbox.classList.contains('active')) {
-                    closeLightbox({ target: lightbox });
-                }
-            }
-        });
-
-        async function imageToImage() {
-            const btn = document.getElementById('img_btn');
-            btn.disabled = true;
-            btn.textContent = '⏳ 正在生成，请稍候';
-            resetStatus('img_status');
-            if (uploadedImagesBase64.length === 0) {
-                showStatus('img_status', '请至少上传 1 张参考图片', 'error');
-                btn.disabled = false;
-                btn.textContent = '🎨 开始生成';
+        async function testConnection() {
+            const { api_key, base_url } = getConfig();
+            if (!api_key) {
+                showStatus('configStatus', '请先填写 API Key。', 'error');
                 return;
             }
-            const resultContainer = document.getElementById('img_result');
-            resultContainer.innerHTML = '<div class="hint">正在生成中，结果出来后会显示在这里。</div>';
-            const data = {
-                api_key: document.getElementById('api_key').value,
-                base_url: document.getElementById('base_url').value,
-                model_id: document.getElementById('model_id').value,
-                prompt: document.getElementById('img_prompt').value,
-                negative_prompt: document.getElementById('img_negative').value,
-                image_count: 1,
-                resolution: document.getElementById('img_resolution').value,
-                aspect_ratio: document.getElementById('img_aspect_ratio').value,
-                image_data_list: uploadedImagesBase64
-            };
+            resetStatus('configStatus');
+            showStatus('configStatus', '正在测试连接...', 'loading');
             try {
-                await saveGeminiDraft();
-                const res = await fetch('/api/image-to-image', {
+                const response = await fetch('/api/test', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key, base_url }),
                 });
-                const result = await res.json();
-                if (result.success) {
-                    const container = document.getElementById('img_result');
-                    const timestamp = new Date().getTime();
-                    container.innerHTML = result.images.map((src, index) => 
-                        `<div class="image-container">
-                            <img src="${src}?t=${timestamp}" class="result-image" onclick="openLightbox('${src}?t=${timestamp}')">
-                            <button class="image-download-btn" onclick="downloadImage('${src}', 'image_${index + 1}.png')">⬇️ 下载</button>
-                        </div>`
-                    ).join('');
-                    showStatus('img_status', result.message, 'success');
-                    refreshSession();
-                } else {
-                    showStatus('img_status', result.message, 'error');
-                }
-            } catch (e) {
-                showStatus('img_status', '错误：' + e.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🎨 开始生成';
+                const result = await response.json();
+                const message = result.message || result.error || '连接测试完成';
+                showStatus('configStatus', message, result.success ? 'success' : 'error');
+            } catch (error) {
+                showStatus('configStatus', `连接测试失败：${error.message}`, 'error');
             }
         }
 
+        async function fetchModels() {
+            const { api_key, base_url } = getConfig();
+            if (!api_key) {
+                showStatus('configStatus', '请先填写 API Key。', 'error');
+                return;
+            }
+            resetStatus('configStatus');
+            showStatus('configStatus', '正在获取模型列表...', 'loading');
+            try {
+                const response = await fetch('/api/models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key, base_url }),
+                });
+                const result = await response.json();
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                updateModelOptions(result.models || []);
+                if (!document.getElementById('modelInput').value.trim() && result.models?.length) {
+                    document.getElementById('modelInput').value = result.models[0];
+                    syncModelDisplays();
+                }
+                showStatus('configStatus', `已加载 ${result.models.length} 个模型。`, 'success');
+            } catch (error) {
+                showStatus('configStatus', error.message, 'error');
+            }
+        }
+
+        async function refreshGeminiSession() {
+            try {
+                const response = await fetch('/api/session');
+                const result = await response.json();
+                document.getElementById('sessionIdText').textContent = result.session_id || '{{ session_id }}';
+                state.lastImageUrl = result.last_image_url || '';
+                state.history = Array.isArray(result.history) ? result.history : [];
+                if (result.draft) applyGeminiDraft(result.draft);
+                renderResultImages(collectHistoryImages(state.history, state.lastImageUrl));
+
+                const meta = [];
+                if (result.request_count > 0) meta.push(`已提交 ${result.request_count} 次`);
+                if (result.has_last_image) meta.push('存在最近结果可复用');
+                document.getElementById('sessionMetaText').textContent = meta.join('，') || '当前浏览器会话会独立保存 Gemini 生图记录。';
+                renderEditPreview();
+            } catch (error) {
+                showStatus('configStatus', `获取会话状态失败：${error.message}`, 'error');
+            }
+        }
+
+        async function clearGeminiSession() {
+            if (!confirm('确定要清空当前 Gemini 生图会话吗？这会删除本地结果和历史记录。')) return;
+            try {
+                const response = await fetch('/api/session/clear', { method: 'POST' });
+                const result = await response.json();
+                if (!result.success) {
+                    showStatus('configStatus', result.message || '清空失败', 'error');
+                    return;
+                }
+                clearEditImage(false);
+                state.lastImageUrl = '';
+                state.history = [];
+                renderResultImages([]);
+                showStatus('configStatus', result.message || '已清空当前 Gemini 会话', 'success');
+                await refreshGeminiSession();
+            } catch (error) {
+                showStatus('configStatus', `清空失败：${error.message}`, 'error');
+            }
+        }
+
+        async function submitGeminiWorkflow() {
+            const workflow = getWorkflowValues();
+            const statusId = getWorkflowStatusId();
+            const buttonId = 'generateButton';
+            resetStatus(statusId);
+            setBusy(buttonId, true, '正在生成图片...', '开始生成');
+
+            if (!workflow.prompt) {
+                showStatus(statusId, '请先填写提示词。', 'error');
+                setBusy(buttonId, false, '正在生成图片...', '开始生成');
+                return;
+            }
+
+            if (!hasWorkflowReferences()) {
+                const payload = {
+                    ...getConfig(),
+                    prompt: workflow.prompt,
+                    negative_prompt: workflow.negative_prompt,
+                    image_count: workflow.image_count,
+                    resolution: workflow.resolution,
+                    aspect_ratio: workflow.aspect_ratio,
+                    use_last_image: false,
+                };
+                showStatus(statusId, '正在提交文生图请求...', 'loading');
+                try {
+                    await saveGeminiDraft();
+                    const response = await fetch('/api/text-to-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        showStatus(statusId, result.message || result.error || '生成失败', 'error');
+                        return;
+                    }
+                    renderResultImages(result.images || []);
+                    showStatus(statusId, result.message || '生成成功', 'success');
+                    await refreshGeminiSession();
+                } catch (error) {
+                    showStatus(statusId, `生成失败：${error.message}`, 'error');
+                } finally {
+                    setBusy(buttonId, false, '正在生成图片...', '开始生成');
+                }
+                return;
+            }
+
+            showStatus(statusId, '正在提交图生图请求...', 'loading');
+            try {
+                await saveGeminiDraft();
+                const imageDataList = state.editImages.slice(0, 4);
+                if (state.useLastImage && state.lastImageUrl) {
+                    imageDataList.unshift(await imageUrlToDataURL(state.lastImageUrl));
+                }
+
+                const payload = {
+                    ...getConfig(),
+                    prompt: workflow.prompt,
+                    negative_prompt: workflow.negative_prompt,
+                    image_count: workflow.image_count,
+                    resolution: workflow.resolution,
+                    aspect_ratio: workflow.aspect_ratio,
+                    image_data_list: imageDataList.slice(0, 4),
+                };
+
+                const response = await fetch('/api/image-to-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    showStatus(statusId, result.message || result.error || '编辑失败', 'error');
+                    return;
+                }
+                renderResultImages(result.images || []);
+                showStatus(statusId, result.message || '编辑成功', 'success');
+                await refreshGeminiSession();
+            } catch (error) {
+                showStatus(statusId, `编辑失败：${error.message}`, 'error');
+            } finally {
+                setBusy(buttonId, false, '正在生成图片...', '开始生成');
+            }
+        }
+
+        document.getElementById('testConnectionButton').addEventListener('click', testConnection);
+        document.getElementById('fetchModelsButton').addEventListener('click', fetchModels);
+        document.getElementById('modelInput').addEventListener('input', () => {
+            syncModelDisplays();
+            scheduleGeminiDraftSave();
+        });
+        document.getElementById('modelSelect').addEventListener('change', (event) => {
+            if (!event.target.value) return;
+            document.getElementById('modelInput').value = event.target.value;
+            syncModelDisplays();
+            scheduleGeminiDraftSave();
+        });
+        pickEditImageButton.addEventListener('click', () => editImageInput.click());
+        editImageInput.addEventListener('change', handleEditImageSelect);
+        useLastImageButton.addEventListener('click', useLastGeneratedImage);
+        clearEditImageButton.addEventListener('click', clearEditImage);
+        document.getElementById('refreshSessionButton').addEventListener('click', refreshGeminiSession);
+        document.getElementById('refreshResultsButton').addEventListener('click', refreshGeminiSession);
+        document.getElementById('clearSessionButton').addEventListener('click', clearGeminiSession);
+        document.getElementById('generateButton').addEventListener('click', submitGeminiWorkflow);
+        document.getElementById('openStepsDialogButton').addEventListener('click', () => openInfoDialog('stepsDialog'));
+        document.getElementById('openSessionDialogButton').addEventListener('click', () => openInfoDialog('sessionDialog'));
         [
-            'api_key',
-            'base_url',
-            'model_id',
-            'txt_prompt',
-            'txt_negative',
-            'txt_resolution',
-            'txt_aspect_ratio',
-            'txt_use_last',
-            'img_prompt',
-            'img_negative',
-            'img_resolution',
-            'img_aspect_ratio',
+            'apiKey',
+            'baseUrl',
+            'generatePrompt',
+            'negativePrompt',
+            'generateSize',
+            'generateAspectRatio',
+            'generateCount',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
             el.addEventListener('input', scheduleGeminiDraftSave);
             el.addEventListener('change', scheduleGeminiDraftSave);
         });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.info-dialog.active').forEach((dialog) => dialog.classList.remove('active'));
+                if (!document.getElementById('lightbox').classList.contains('active')) {
+                    document.body.style.overflow = '';
+                }
+            }
+            if (event.key === 'Escape' && document.getElementById('lightbox').classList.contains('active')) {
+                closeLightbox({ target: document.getElementById('lightbox') });
+            }
+        });
 
-        refreshSession();
-</script>
+        renderEditPreview();
+        updateModelOptions(['{{ default_model }}']);
+        syncModelDisplays();
+        setupUnifiedWorkflowPanel();
+        refreshGeminiSession();
+    </script>
 </body>
 </html>

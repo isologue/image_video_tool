@@ -191,6 +191,70 @@ def append_gemini_history(session_id, mode, prompt, image_names):
     return entry
 
 
+def rebuild_gemini_last_image_state(state, session_id):
+    history = state.get('history', [])
+    session_dir = get_session_dir(session_id)
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        images = entry.get('images')
+        if not isinstance(images, list) or not images:
+            continue
+        first_image_url = images[0]
+        filename = Path(first_image_url).name
+        image_path = session_dir / filename
+        if image_path.exists():
+            state['last_image'] = str(image_path)
+            return state
+
+    state['last_image'] = None
+    return state
+
+
+def delete_gemini_history_image(session_id, image_url):
+    image_name = Path((image_url or '').strip()).name
+    if not image_name:
+        return False, 'Invalid image reference'
+
+    session_dir = get_session_dir(session_id)
+    target_path = session_dir / image_name
+    if not target_path.exists():
+        return False, 'Image not found'
+
+    state = load_session_state(session_id)
+    history = state.get('history', [])
+    updated_history = []
+    removed = False
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        images = entry.get('images')
+        if not isinstance(images, list):
+            continue
+        remaining_images = []
+        for item in images:
+            if Path(str(item)).name == image_name:
+                removed = True
+                continue
+            remaining_images.append(item)
+        if remaining_images:
+            next_entry = dict(entry)
+            next_entry['images'] = remaining_images
+            updated_history.append(next_entry)
+
+    if not removed:
+        return False, 'Image not found in history'
+
+    target_path.unlink(missing_ok=True)
+    state['history'] = updated_history[:20]
+    state['last_accessed'] = time.time()
+    rebuild_gemini_last_image_state(state, session_id)
+    save_session_state(session_id, state)
+    return True, None
+
+
 def save_gemini_draft(session_id, payload):
     state = load_session_state(session_id)
     draft = {
@@ -206,6 +270,7 @@ def save_gemini_draft(session_id, payload):
         'img_negative': payload.get('img_negative', ''),
         'img_resolution': payload.get('img_resolution', '1K (1024x1024)'),
         'img_aspect_ratio': payload.get('img_aspect_ratio', '1:1'),
+        'generate_count': str(payload.get('generate_count', '1')),
         'uploaded_images': payload.get('uploaded_images', [])[:4],
         'updated_at': utc_now_iso(),
     }
@@ -355,6 +420,74 @@ def append_gpt_history(session_id, entry):
     state['history'] = history[:20]
     state['last_accessed'] = time.time()
     save_gpt_session_state(session_id, state)
+
+
+def rebuild_gpt_last_image_state(state, session_id):
+    history = state.get('history', [])
+    session_dir = get_gpt_session_dir(session_id)
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        images = entry.get('images')
+        if not isinstance(images, list) or not images:
+            continue
+        first_image_url = images[0]
+        filename = Path(first_image_url).name
+        image_path = session_dir / filename
+        if image_path.exists():
+            state['last_image'] = str(image_path)
+            state['last_prompt'] = entry.get('prompt', '')
+            state['last_mode'] = entry.get('mode', '')
+            return state
+
+    state['last_image'] = None
+    state['last_prompt'] = ''
+    state['last_mode'] = ''
+    return state
+
+
+def delete_gpt_history_image(session_id, image_url):
+    image_name = Path((image_url or '').strip()).name
+    if not image_name:
+        return False, 'Invalid image reference'
+
+    session_dir = get_gpt_session_dir(session_id)
+    target_path = session_dir / image_name
+    if not target_path.exists():
+        return False, 'Image not found'
+
+    state = load_gpt_session_state(session_id)
+    history = state.get('history', [])
+    updated_history = []
+    removed = False
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        images = entry.get('images')
+        if not isinstance(images, list):
+            continue
+        remaining_images = []
+        for item in images:
+            if Path(str(item)).name == image_name:
+                removed = True
+                continue
+            remaining_images.append(item)
+        if remaining_images:
+            next_entry = dict(entry)
+            next_entry['images'] = remaining_images
+            updated_history.append(next_entry)
+
+    if not removed:
+        return False, 'Image not found in history'
+
+    target_path.unlink(missing_ok=True)
+    state['history'] = updated_history[:20]
+    state['last_accessed'] = time.time()
+    rebuild_gpt_last_image_state(state, session_id)
+    save_gpt_session_state(session_id, state)
+    return True, None
 
 
 def clear_gpt_session_data(session_id):
@@ -1048,6 +1181,24 @@ def clear_session():
     return set_session_cookie(response, new_session_id)
 
 
+@app.route('/api/gemini-image/result', methods=['DELETE'])
+def delete_gemini_image_result():
+    session_id = get_session_id()
+    payload = request.get_json(silent=True) or {}
+    image_url = (payload.get('image_url') or '').strip()
+
+    if not image_url:
+        return jsonify({'success': False, 'message': '请提供要删除的图片'}), 400
+
+    success, error = delete_gemini_history_image(session_id, image_url)
+    if not success:
+        status_code = 404 if error == 'Image not found' or error == 'Image not found in history' else 400
+        return jsonify({'success': False, 'message': error}), status_code
+
+    response = jsonify({'success': True, 'message': '图片已删除', 'session': build_gemini_session_payload(session_id)})
+    return set_session_cookie(response, session_id)
+
+
 @app.route('/api/gpt-image/session', methods=['GET', 'POST'])
 def get_gpt_image_session():
     session_id = get_gpt_session_id()
@@ -1094,6 +1245,24 @@ def clear_gpt_image_session():
         'new_session_id': new_session_id,
     })
     return set_gpt_session_cookie(response, new_session_id)
+
+
+@app.route('/api/gpt-image/result', methods=['DELETE'])
+def delete_gpt_image_result():
+    session_id = get_gpt_session_id()
+    payload = request.get_json(silent=True) or {}
+    image_url = (payload.get('image_url') or '').strip()
+
+    if not image_url:
+        return jsonify({'success': False, 'message': '请提供要删除的图片'}), 400
+
+    success, error = delete_gpt_history_image(session_id, image_url)
+    if not success:
+        status_code = 404 if error == 'Image not found' or error == 'Image not found in history' else 400
+        return jsonify({'success': False, 'message': error}), status_code
+
+    response = jsonify({'success': True, 'message': '图片已删除', 'session': build_gpt_session_payload(session_id)})
+    return set_gpt_session_cookie(response, session_id)
 
 
 @app.route('/api/models', methods=['POST'])

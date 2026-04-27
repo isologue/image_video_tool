@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -132,6 +132,37 @@
             color: var(--muted);
             font-size: 13px;
             line-height: 1.7;
+        }
+
+        .workspace-card {
+            background: linear-gradient(160deg, rgba(13, 18, 28, 0.92), rgba(22, 29, 41, 0.86));
+            border: 1px solid rgba(96, 165, 250, 0.18);
+            border-radius: 24px;
+            padding: 22px;
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 14px;
+        }
+
+        .workspace-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #7dd3fc;
+        }
+
+        .workspace-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .hero-steps {
@@ -341,6 +372,12 @@
             border: 1px solid rgba(255, 123, 138, 0.2);
         }
 
+        .btn-danger-soft {
+            background: rgba(255, 123, 138, 0.08);
+            color: #ffd7dc;
+            border: 1px solid rgba(255, 123, 138, 0.16);
+        }
+
         .btn-inline {
             padding: 9px 14px;
             border-radius: 999px;
@@ -493,6 +530,73 @@
             justify-content: flex-end;
         }
 
+        .info-dialog {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 21;
+        }
+
+        .info-dialog.active { display: flex; }
+
+        .info-dialog-panel {
+            width: min(92vw, 560px);
+            background: rgba(6, 12, 24, 0.97);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 22px;
+            padding: 24px;
+            position: relative;
+            box-shadow: var(--shadow);
+        }
+
+        .info-dialog-panel h3 {
+            margin: 0 0 14px;
+            font-size: 20px;
+        }
+
+        .info-dialog-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .info-list {
+            display: grid;
+            gap: 14px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .info-list strong,
+        .info-session strong {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+
+        .info-session {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .info-session .session-id {
+            margin: 10px 0 6px;
+            font-size: 15px;
+        }
+
         @media (max-width: 1024px) {
             .hero-top,
             .layout {
@@ -531,24 +635,13 @@
                         <div class="badge">支持预览下载与复用最近结果</div>
                     </div>
                 </div>
-                <div class="session-card"> 
-                    <div class="session-label">Session</div>
-                    <div class="session-id" id="sessionIdText">{{ session_id }}</div>
-                    <div class="session-meta">当前浏览器会话会独立保存 GPT 生图记录 。</div>
-                </div>
-            </div>
-            <div class="hero-steps">
-                <div class="step-card">
-                    <strong>1. 配参数</strong>
-                    <p>先填写 `API Key`、`Base URL`、模型和提示词；编辑图支持最多 4 张参考图追加上传。</p>
-                </div>
-                <div class="step-card">
-                    <strong>2. 提交任务</strong>
-                    <p>文生图直接生成；编辑图可逐张补充参考图，再一起提交，兼容模式同样支持多图参考。</p>
-                </div>
-                <div class="step-card">
-                    <strong>3. 看结果</strong>
-                    <p>生成后可在右侧直接预览、刷新和下载图片，也可以复用最近结果继续做二次编辑。</p>
+                <div class="workspace-card">
+                    <div class="workspace-label">Workspace</div>
+                    <!-- <div class="workspace-copy">生成入口、参考图操作和最近结果复用都保留在当前卡片工作流里；详细说明收进下面两个按钮。</div> -->
+                    <div class="hero-actions">
+                        <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
+                        <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -757,6 +850,39 @@
         </div>
     </div>
 
+    <div class="info-dialog" id="stepsDialog" onclick="closeInfoDialog(event)">
+        <div class="info-dialog-panel">
+            <button type="button" class="info-dialog-close" onclick="closeInfoDialog(event)">×</button>
+            <h3>使用步骤</h3>
+            <div class="info-list">
+                <div>
+                    <strong>1. 配参数</strong>
+                    <div>先填写 `API Key`、`Base URL`、模型和提示词；编辑图支持最多 4 张参考图追加上传。</div>
+                </div>
+                <div>
+                    <strong>2. 提交任务</strong>
+                    <div>没有参考图时直接文生图；上传参考图或复用最近结果后会自动走编辑图流程。</div>
+                </div>
+                <div>
+                    <strong>3. 看结果</strong>
+                    <div>右侧会展示当前会话的最近结果，支持预览、下载、删除和继续复用。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-dialog" id="sessionDialog" onclick="closeInfoDialog(event)">
+        <div class="info-dialog-panel">
+            <button type="button" class="info-dialog-close" onclick="closeInfoDialog(event)">×</button>
+            <h3>Session 信息</h3>
+            <div class="info-session">
+                <strong>当前会话 ID</strong>
+                <div class="session-id" id="sessionIdText">{{ session_id }}</div>
+                <div>当前浏览器会话会独立保存 GPT 生图记录，不和 Gemini 或视频工作区共享。</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const tabs = document.querySelectorAll('.tab');
         const tabPanels = document.querySelectorAll('.tab-panel');
@@ -770,6 +896,10 @@
             saveTimer: null,
             applyingDraft: false,
         };
+        const generateTabButton = document.querySelector('.tab[data-tab="generatePanel"]');
+        const editTabButton = document.querySelector('.tab[data-tab="editPanel"]');
+        const generatePanel = document.getElementById('generatePanel');
+        const editPanel = document.getElementById('editPanel');
         const editImageInput = document.getElementById('editImageInputTop');
         const pickEditImageButton = document.getElementById('pickEditImageButtonTop');
         const useLastImageButton = document.getElementById('useLastImageButtonTop');
@@ -783,6 +913,31 @@
                 document.getElementById(tab.dataset.tab).classList.add('active');
             });
         });
+
+        function setupUnifiedWorkflowPanel() {
+            if (generateTabButton) {
+                generateTabButton.textContent = '生成工作流';
+            }
+            if (editTabButton) {
+                editTabButton.style.display = 'none';
+                editTabButton.disabled = true;
+            }
+            if (editPanel) {
+                editPanel.classList.remove('active');
+                editPanel.style.display = 'none';
+            }
+
+            const referenceGroup = editImageInput?.closest('.group');
+            const promptGroup = document.getElementById('generatePrompt')?.closest('.group');
+            if (referenceGroup && promptGroup && referenceGroup.parentElement !== generatePanel) {
+                promptGroup.insertAdjacentElement('afterend', referenceGroup);
+            }
+
+            const workflowButton = document.getElementById('generateButton');
+            if (workflowButton) {
+                workflowButton.textContent = '开始生成';
+            }
+        }
 
         function showStatus(id, message, type) {
             const el = document.getElementById(id);
@@ -802,6 +957,24 @@
                 base_url: document.getElementById('baseUrl').value.trim(),
                 model: document.getElementById('modelInput').value.trim(),
                 interface_mode: state.interfaceMode,
+            };
+        }
+
+        function getWorkflowStatusId() {
+            return 'generateStatus';
+        }
+
+        function hasWorkflowReferences() {
+            return state.useLastImage || state.editFiles.length > 0;
+        }
+
+        function getWorkflowValues() {
+            return {
+                prompt: document.getElementById('generatePrompt').value.trim(),
+                size: document.getElementById('generateSize').value,
+                aspect_ratio: document.getElementById('generateAspectRatio').value,
+                image_count: Number(document.getElementById('generateCount').value),
+                quality: document.getElementById('generateQuality').value,
             };
         }
 
@@ -864,18 +1037,19 @@
                 size: file.size,
                 dataURL: await fileToDataURL(file),
             })));
+            const workflow = getWorkflowValues();
             return {
                 ...getConfig(),
-                generate_prompt: document.getElementById('generatePrompt').value,
-                generate_size: document.getElementById('generateSize').value,
-                generate_aspect_ratio: document.getElementById('generateAspectRatio').value,
-                generate_count: document.getElementById('generateCount').value,
-                generate_quality: document.getElementById('generateQuality').value,
-                edit_prompt: document.getElementById('editPrompt').value,
-                edit_size: document.getElementById('editSize').value,
-                edit_aspect_ratio: document.getElementById('editAspectRatio').value,
-                edit_count: document.getElementById('editCount').value,
-                edit_quality: document.getElementById('editQuality').value,
+                generate_prompt: workflow.prompt,
+                generate_size: workflow.size,
+                generate_aspect_ratio: workflow.aspect_ratio,
+                generate_count: String(workflow.image_count),
+                generate_quality: workflow.quality,
+                edit_prompt: workflow.prompt,
+                edit_size: workflow.size,
+                edit_aspect_ratio: workflow.aspect_ratio,
+                edit_count: String(workflow.image_count),
+                edit_quality: workflow.quality,
                 use_last_image: state.useLastImage,
                 edit_references: references.slice(0, 4),
             };
@@ -908,8 +1082,6 @@
 
         function syncModelDisplays() {
             const value = document.getElementById('modelInput').value.trim();
-            document.getElementById('generateModelDisplay').value = value;
-            document.getElementById('editModelDisplay').value = value;
             const select = document.getElementById('modelSelect');
             if (Array.from(select.options).some((option) => option.value === value)) {
                 select.value = value;
@@ -945,20 +1117,32 @@
 
         function applyGptDraft(draft = {}) {
             state.applyingDraft = true;
+            const preferEditDraft = Boolean(draft.use_last_image)
+                || (Array.isArray(draft.edit_references) && draft.edit_references.length > 0);
+            const promptValue = preferEditDraft
+                ? (draft.edit_prompt || draft.generate_prompt || '')
+                : (draft.generate_prompt || draft.edit_prompt || '');
+            const sizeValue = preferEditDraft
+                ? (draft.edit_size || draft.generate_size)
+                : (draft.generate_size || draft.edit_size);
+            const aspectRatioValue = preferEditDraft
+                ? (draft.edit_aspect_ratio || draft.generate_aspect_ratio)
+                : (draft.generate_aspect_ratio || draft.edit_aspect_ratio);
+            const countValue = preferEditDraft
+                ? (draft.edit_count || draft.generate_count)
+                : (draft.generate_count || draft.edit_count);
+            const qualityValue = preferEditDraft
+                ? (draft.edit_quality || draft.generate_quality)
+                : (draft.generate_quality || draft.edit_quality);
             document.getElementById('apiKey').value = draft.api_key || '';
             document.getElementById('baseUrl').value = draft.base_url || document.getElementById('baseUrl').value;
             document.getElementById('modelInput').value = draft.model || document.getElementById('modelInput').value;
             setInterfaceMode(draft.interface_mode || state.interfaceMode);
-            document.getElementById('generatePrompt').value = draft.generate_prompt || '';
-            setSelectValue('generateSize', draft.generate_size);
-            setSelectValue('generateAspectRatio', draft.generate_aspect_ratio);
-            setSelectValue('generateCount', draft.generate_count);
-            setSelectValue('generateQuality', draft.generate_quality);
-            document.getElementById('editPrompt').value = draft.edit_prompt || '';
-            setSelectValue('editSize', draft.edit_size);
-            setSelectValue('editAspectRatio', draft.edit_aspect_ratio);
-            setSelectValue('editCount', draft.edit_count);
-            setSelectValue('editQuality', draft.edit_quality);
+            document.getElementById('generatePrompt').value = promptValue;
+            setSelectValue('generateSize', sizeValue);
+            setSelectValue('generateAspectRatio', aspectRatioValue);
+            setSelectValue('generateCount', countValue);
+            setSelectValue('generateQuality', qualityValue);
             const references = Array.isArray(draft.edit_references) ? draft.edit_references.slice(0, 4) : [];
             state.editFiles = references
                 .filter((item) => item && item.dataURL)
@@ -1022,6 +1206,34 @@
                 : '原生模式使用 `/v1/images/generations`。';
         }
 
+        function updateWorkflowModeHint() {
+            const referenceGroup = editImageInput?.closest('.group');
+            if (!referenceGroup) return;
+
+            let hint = referenceGroup.querySelector('[data-workflow-mode-hint]');
+            if (!hint) {
+                hint = document.createElement('div');
+                hint.className = 'hint';
+                hint.dataset.workflowModeHint = 'true';
+                const actions = referenceGroup.querySelector('.actions');
+                if (actions) {
+                    actions.insertAdjacentElement('afterend', hint);
+                } else {
+                    referenceGroup.appendChild(hint);
+                }
+            }
+
+            if (state.useLastImage && state.lastImageUrl) {
+                hint.textContent = '当前模式：图生图，提交时会复用最近结果作为参考图。';
+                return;
+            }
+            if (state.editFiles.length > 0) {
+                hint.textContent = `当前模式：图生图，已选择 ${state.editFiles.length} 张参考图，提交时会走图生图接口。`;
+                return;
+            }
+            hint.textContent = '当前模式：文生图。未上传参考图时，提交会直接走文生图接口。';
+        }
+
         function renderEditPreview() {
             const container = document.getElementById('editPreviewGrid');
             if (state.useLastImage && state.lastImageUrl) {
@@ -1031,6 +1243,7 @@
                         <div class="preview-meta">当前使用：最近结果</div>
                     </div>
                 `;
+                updateWorkflowModeHint();
                 return;
             }
             if (state.editFiles.length && state.currentPreviewUrls.length) {
@@ -1041,9 +1254,11 @@
                         <div class="preview-meta">${file.name}</div>
                     </div>
                 `).join('');
+                updateWorkflowModeHint();
                 return;
             }
-            container.innerHTML = '<div class="empty">当前没有参考图。你可以上传 1 到 4 张图片，或直接复用最近结果。</div>';
+            container.innerHTML = '<div class="empty">当前没有参考图。你可以上传 1 到 4 张图片，或者直接复用最近结果。</div>';
+            updateWorkflowModeHint();
         }
 
         function clearEditImage(save = true) {
@@ -1058,7 +1273,7 @@
         async function handleEditImageSelect(event) {
             const incomingFiles = Array.from(event.target.files || []);
             if (!incomingFiles.length) return;
-            showStatus('editStatus', '正在压缩并保存参考图草稿...', 'loading');
+            showStatus(getWorkflowStatusId(), '正在压缩并保存参考图草稿...', 'loading');
             const compressedFiles = [];
             for (const file of incomingFiles) {
                 compressedFiles.push(await compressReferenceFile(file));
@@ -1079,7 +1294,7 @@
             state.currentPreviewUrls = state.editFiles.map((file) => URL.createObjectURL(file));
             event.target.value = '';
             renderEditPreview();
-            resetStatus('editStatus');
+            resetStatus(getWorkflowStatusId());
             scheduleGptDraftSave();
         }
 
@@ -1097,10 +1312,10 @@
 
         function useLastGeneratedImage() {
             if (!state.lastImageUrl) {
-                showStatus('editStatus', '当前会话没有最近结果可复用。', 'error');
+                showStatus(getWorkflowStatusId(), '当前会话没有最近结果可复用。', 'error');
                 return;
             }
-            resetStatus('editStatus');
+            resetStatus(getWorkflowStatusId());
             state.editFiles = [];
             state.useLastImage = true;
             clearCurrentPreviewUrls();
@@ -1128,10 +1343,49 @@
                 <div class="image-card">
                     <img src="${src}?t=${timestamp}" alt="result-${index + 1}" onclick="openLightbox('${src}')">
                     <div class="image-actions">
-                        <button type="button" class="btn-secondary" onclick="downloadImage(event, '${src}', 'gpt_image_${index + 1}.png')">下载图片</button>
+                        <button type="button" class="btn-secondary" onclick="downloadImage(event, '${src}', 'gpt_image_${index + 1}.png')">下载</button>
+                        <button type="button" class="btn-secondary btn-danger-soft" onclick="deleteResultImage(event, '${src}')">删除</button>
                     </div>
                 </div>
             `).join('');
+        }
+
+        function collectHistoryImages(history = [], fallbackImageUrl = '') {
+            if (!Array.isArray(history) || history.length === 0) {
+                return fallbackImageUrl ? [fallbackImageUrl] : [];
+            }
+
+            const images = [];
+            history.forEach((entry) => {
+                if (!entry || !Array.isArray(entry.images)) return;
+                entry.images.forEach((src) => {
+                    if (src) images.push(src);
+                });
+            });
+            return images;
+        }
+
+        async function deleteResultImage(event, src) {
+            if (event) event.stopPropagation();
+            if (!src) return;
+            if (!confirm('确定要删除这张图片吗？')) return;
+
+            try {
+                const response = await fetch('/api/gpt-image/result', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: src }),
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    showStatus('configStatus', result.message || '删除失败', 'error');
+                    return;
+                }
+                showStatus('configStatus', result.message || '图片已删除', 'success');
+                await refreshGptSession();
+            } catch (error) {
+                showStatus('configStatus', `删除失败：${error.message}`, 'error');
+            }
         }
 
         function openLightbox(src) {
@@ -1149,6 +1403,25 @@
             if (!event || event.target.id === 'lightbox' || event.target.classList.contains('lightbox-close')) {
                 document.getElementById('lightbox').classList.remove('active');
                 document.body.style.overflow = '';
+            }
+        }
+
+        function openInfoDialog(id) {
+            const dialog = document.getElementById(id);
+            if (!dialog) return;
+            dialog.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeInfoDialog(event) {
+            if (!event) return;
+            const target = event.target;
+            if (!target) return;
+            if (target.classList.contains('info-dialog') || target.classList.contains('info-dialog-close')) {
+                target.closest('.info-dialog').classList.remove('active');
+                if (!document.getElementById('lightbox').classList.contains('active')) {
+                    document.body.style.overflow = '';
+                }
             }
         }
 
@@ -1214,10 +1487,7 @@
                 state.lastImageUrl = result.last_image_url || '';
                 state.history = Array.isArray(result.history) ? result.history : [];
                 if (result.draft) applyGptDraft(result.draft);
-                const latestImages = state.history.length > 0 && Array.isArray(state.history[0].images)
-                    ? state.history[0].images
-                    : (state.lastImageUrl ? [state.lastImageUrl] : []);
-                renderResultImages(latestImages);
+                renderResultImages(collectHistoryImages(state.history, state.lastImageUrl));
                 renderEditPreview();
             } catch (error) {
                 showStatus('configStatus', `获取会话状态失败：${error.message}`, 'error');
@@ -1244,66 +1514,63 @@
             }
         }
 
-        async function generateGptImage() {
-            const payload = {
-                ...getConfig(),
-                prompt: document.getElementById('generatePrompt').value.trim(),
-                image_count: Number(document.getElementById('generateCount').value),
-                quality: document.getElementById('generateQuality').value,
-                aspect_ratio: document.getElementById('generateAspectRatio').value,
-                size: resolveSize(
-                    document.getElementById('generateSize').value,
-                    document.getElementById('generateAspectRatio').value,
-                ),
-            };
-            resetStatus('generateStatus');
-            setBusy('generateButton', true, '正在生成图片...', '开始生成图片');
-            showStatus('generateStatus', '正在提交文生图请求...', 'loading');
-            try {
-                await saveGptDraft();
-                const response = await fetch('/api/gpt-image/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    showStatus('generateStatus', formatApiError(result, '生成失败'), 'error');
-                    return;
-                }
-                renderResultImages(result.images || []);
-                showStatus('generateStatus', result.message || '生成成功', 'success');
-                await refreshGptSession();
-            } catch (error) {
-                showStatus('generateStatus', `生成失败：${error.message}`, 'error');
-            } finally {
-                setBusy('generateButton', false, '正在生成图片...', '开始生成图片');
-            }
-        }
+        async function submitGptWorkflow() {
+            const workflow = getWorkflowValues();
+            const statusId = getWorkflowStatusId();
+            const buttonId = 'generateButton';
+            resetStatus(statusId);
+            setBusy(buttonId, true, '正在生成图片...', '开始生成');
 
-        async function editGptImage() {
+            if (!hasWorkflowReferences()) {
+                const payload = {
+                    ...getConfig(),
+                    prompt: workflow.prompt,
+                    image_count: workflow.image_count,
+                    quality: workflow.quality,
+                    aspect_ratio: workflow.aspect_ratio,
+                    size: resolveSize(workflow.size, workflow.aspect_ratio),
+                };
+                showStatus(statusId, '正在提交文生图请求...', 'loading');
+                try {
+                    await saveGptDraft();
+                    const response = await fetch('/api/gpt-image/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        showStatus(statusId, formatApiError(result, '生成失败'), 'error');
+                        return;
+                    }
+                    renderResultImages(result.images || []);
+                    showStatus(statusId, result.message || '生成成功', 'success');
+                    await refreshGptSession();
+                } catch (error) {
+                    showStatus(statusId, `生成失败：${error.message}`, 'error');
+                } finally {
+                    setBusy(buttonId, false, '正在生成图片...', '开始生成');
+                }
+                return;
+            }
+
             const formData = new FormData();
             const config = getConfig();
             formData.append('api_key', config.api_key);
             formData.append('base_url', config.base_url);
             formData.append('model', config.model);
             formData.append('interface_mode', config.interface_mode);
-            formData.append('prompt', document.getElementById('editPrompt').value.trim());
-            formData.append('quality', document.getElementById('editQuality').value);
-            formData.append('aspect_ratio', document.getElementById('editAspectRatio').value);
-            formData.append('size', resolveSize(
-                document.getElementById('editSize').value,
-                document.getElementById('editAspectRatio').value,
-            ));
-            formData.append('image_count', document.getElementById('editCount').value);
+            formData.append('prompt', workflow.prompt);
+            formData.append('quality', workflow.quality);
+            formData.append('aspect_ratio', workflow.aspect_ratio);
+            formData.append('size', resolveSize(workflow.size, workflow.aspect_ratio));
+            formData.append('image_count', String(workflow.image_count));
             if (state.useLastImage) {
                 formData.append('use_last_image', 'true');
             } else if (state.editFiles.length) {
                 state.editFiles.forEach((file) => formData.append('image[]', file));
             }
-            resetStatus('editStatus');
-            setBusy('editButton', true, '正在编辑图片...', '开始编辑图片');
-            showStatus('editStatus', '正在提交编辑图请求...', 'loading');
+            showStatus(statusId, '正在提交图生图请求...', 'loading');
             try {
                 await saveGptDraft();
                 const response = await fetch('/api/gpt-image/edit', {
@@ -1312,16 +1579,16 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    showStatus('editStatus', formatApiError(result, '编辑失败'), 'error');
+                    showStatus(statusId, formatApiError(result, '编辑失败'), 'error');
                     return;
                 }
                 renderResultImages(result.images || []);
-                showStatus('editStatus', result.message || '编辑成功', 'success');
+                showStatus(statusId, result.message || '编辑成功', 'success');
                 await refreshGptSession();
             } catch (error) {
-                showStatus('editStatus', `编辑失败：${error.message}`, 'error');
+                showStatus(statusId, `编辑失败：${error.message}`, 'error');
             } finally {
-                setBusy('editButton', false, '正在编辑图片...', '开始编辑图片');
+                setBusy(buttonId, false, '正在生成图片...', '开始生成');
             }
         }
 
@@ -1349,8 +1616,9 @@
         document.getElementById('refreshSessionButton').addEventListener('click', refreshGptSession);
         document.getElementById('refreshResultsButton').addEventListener('click', refreshGptSession);
         document.getElementById('clearSessionButton').addEventListener('click', clearGptSession);
-        document.getElementById('generateButton').addEventListener('click', generateGptImage);
-        document.getElementById('editButton').addEventListener('click', editGptImage);
+        document.getElementById('generateButton').addEventListener('click', submitGptWorkflow);
+        document.getElementById('openStepsDialogButton').addEventListener('click', () => openInfoDialog('stepsDialog'));
+        document.getElementById('openSessionDialogButton').addEventListener('click', () => openInfoDialog('sessionDialog'));
         [
             'apiKey',
             'baseUrl',
@@ -1359,11 +1627,6 @@
             'generateAspectRatio',
             'generateCount',
             'generateQuality',
-            'editPrompt',
-            'editSize',
-            'editAspectRatio',
-            'editCount',
-            'editQuality',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
@@ -1371,6 +1634,12 @@
             el.addEventListener('change', scheduleGptDraftSave);
         });
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.info-dialog.active').forEach((dialog) => dialog.classList.remove('active'));
+                if (!document.getElementById('lightbox').classList.contains('active')) {
+                    document.body.style.overflow = '';
+                }
+            }
             if (event.key === 'Escape' && document.getElementById('lightbox').classList.contains('active')) {
                 closeLightbox({ target: document.getElementById('lightbox') });
             }
@@ -1380,6 +1649,7 @@
         updateModelOptions(['{{ default_model }}']);
         syncModelDisplays();
         setInterfaceMode('native');
+        setupUnifiedWorkflowPanel();
         refreshGptSession();
     </script>
 </body>
