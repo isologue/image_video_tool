@@ -8,6 +8,7 @@ Gemini 鍥剧墖鐢熸垚涓庣紪杈戝伐鍏?- Flask 鐗堟湰 (澶氱敤鎴�
 
 import os
 import base64
+import copy
 import requests
 import time
 import uuid
@@ -16,6 +17,7 @@ import logging
 import sys
 import hashlib
 import shutil
+import html as html_lib
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory, make_response
 from PIL import Image
@@ -41,8 +43,13 @@ app = Flask(__name__)
 # 閰嶇疆
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/output")
 SESSIONS_DIR = os.getenv("SESSIONS_DIR", "/app/sessions")
-DEFAULT_BASE_URL = os.getenv("DEFAULT_BASE_URL", "https://moai.wiki")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-2.5-flash-image")
+DEFAULT_BASE_URL = os.getenv("DEFAULT_BASE_URL", "https://lnapi.com")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-3.1-flash-image-preview-2k")
+GEMINI_RESPONSE_MODALITIES = [
+    item.strip()
+    for item in os.getenv("GEMINI_RESPONSE_MODALITIES", "TEXT,IMAGE").split(",")
+    if item.strip()
+]
 SESSION_COOKIE_NAME = "gemini_session_id"
 SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 澶?
 VIDEO_SESSION_COOKIE_NAME = "video_tool_session_id"
@@ -51,6 +58,7 @@ DEFAULT_VIDEO_MODEL = os.getenv("DEFAULT_VIDEO_MODEL", "grok-imagine-1.0-video")
 DEFAULT_GPT_IMAGE_BASE_URL = os.getenv("DEFAULT_GPT_IMAGE_BASE_URL", DEFAULT_BASE_URL)
 DEFAULT_GPT_IMAGE_MODEL = os.getenv("DEFAULT_GPT_IMAGE_MODEL", "gpt-image-2-flatfee")
 DEFAULT_REQUEST_TIMEOUT = int(os.getenv("DEFAULT_REQUEST_TIMEOUT", "60"))
+ENABLE_IMAGE_TIMEOUT_FALLBACK = os.getenv("ENABLE_IMAGE_TIMEOUT_FALLBACK", "false").lower() not in {"0", "false", "no"}
 GEMINI_OUTPUT_SUBDIR = "gemini"
 GPT_IMAGE_OUTPUT_SUBDIR = "gpt"
 GPT_IMAGE_SESSION_SUBDIR = "gpt"
@@ -65,6 +73,8 @@ Path(SESSIONS_DIR).mkdir(parents=True, exist_ok=True)
 session_states = {}  # {session_id: {"last_image": str, "created_at": float}}
 session_lock = threading.Lock()
 file_lock = threading.Lock()
+gemini_tasks = {}
+gemini_task_lock = threading.Lock()
 
 
 def get_session_id():
@@ -148,6 +158,98 @@ def save_session_state(session_id, state):
                 json.dump(state, f, indent=2)
         except Exception as e:
             logging.error(f"淇濆瓨 Session 鐘舵€佸け璐ワ細{e}")
+
+
+def create_gemini_task(session_id, mode, payload):
+    task_id = str(uuid.uuid4())
+    now = utc_now_iso()
+    task = {
+        'task_id': task_id,
+        'session_id': session_id,
+        'mode': mode,
+        'status': 'queued',
+        'success': False,
+        'message': 'Task queued',
+        'created_at': now,
+        'updated_at': now,
+        'result': None,
+        'error': None,
+    }
+    with gemini_task_lock:
+        gemini_tasks[task_id] = task
+
+    worker = threading.Thread(
+        target=run_gemini_task,
+        args=(task_id, session_id, mode, copy.deepcopy(payload)),
+        daemon=True,
+    )
+    worker.start()
+    return task
+
+
+def update_gemini_task(task_id, **updates):
+    updates['updated_at'] = utc_now_iso()
+    with gemini_task_lock:
+        task = gemini_tasks.get(task_id)
+        if not task:
+            return None
+        task.update(updates)
+        return dict(task)
+
+
+def get_gemini_task(task_id):
+    with gemini_task_lock:
+        task = gemini_tasks.get(task_id)
+        return dict(task) if task else None
+
+
+def normalize_flask_result(result):
+    status_code = 200
+    response = result
+    if isinstance(result, tuple):
+        response = result[0]
+        if len(result) > 1 and isinstance(result[1], int):
+            status_code = result[1]
+    if hasattr(response, 'status_code'):
+        status_code = response.status_code
+    if hasattr(response, 'get_json'):
+        data = response.get_json(silent=True)
+        if data is not None:
+            return status_code, data
+    if hasattr(response, 'get_data'):
+        return status_code, {'success': False, 'message': response.get_data(as_text=True)[:500]}
+    return status_code, {'success': False, 'message': str(response)[:500]}
+
+
+def run_gemini_task(task_id, session_id, mode, payload):
+    update_gemini_task(task_id, status='running', message='Task running')
+    endpoint = '/api/text-to-image' if mode == 'text' else '/api/image-to-image'
+    view_func = text_to_image if mode == 'text' else image_to_image
+    try:
+        cookie_header = f'{SESSION_COOKIE_NAME}={session_id}'
+        with app.test_request_context(endpoint, method='POST', json=payload, headers={'Cookie': cookie_header}):
+            status_code, data = normalize_flask_result(view_func())
+
+        success = bool(data.get('success')) and status_code < 400
+        update_gemini_task(
+            task_id,
+            status='succeeded' if success else 'failed',
+            success=success,
+            message=data.get('message') or data.get('error') or ('Task completed' if success else 'Task failed'),
+            result=data if success else None,
+            error=None if success else data,
+            finished_at=utc_now_iso(),
+        )
+    except Exception as exc:
+        logging.exception('Gemini async task failed: %s', task_id)
+        update_gemini_task(
+            task_id,
+            status='failed',
+            success=False,
+            message=f'Error: {exc}',
+            error={'success': False, 'message': str(exc)},
+            finished_at=utc_now_iso(),
+        )
 
 
 def update_session_last_image(session_id, image_path):
@@ -263,13 +365,13 @@ def save_gemini_draft(session_id, payload):
         'model_id': payload.get('model_id', DEFAULT_MODEL),
         'txt_prompt': payload.get('txt_prompt', ''),
         'txt_negative': payload.get('txt_negative', ''),
-        'txt_resolution': payload.get('txt_resolution', '1K (1024x1024)'),
-        'txt_aspect_ratio': payload.get('txt_aspect_ratio', '1:1'),
+        'txt_resolution': payload.get('txt_resolution', ''),
+        'txt_aspect_ratio': payload.get('txt_aspect_ratio', ''),
         'txt_use_last': bool(payload.get('txt_use_last', False)),
         'img_prompt': payload.get('img_prompt', ''),
         'img_negative': payload.get('img_negative', ''),
-        'img_resolution': payload.get('img_resolution', '1K (1024x1024)'),
-        'img_aspect_ratio': payload.get('img_aspect_ratio', '1:1'),
+        'img_resolution': payload.get('img_resolution', ''),
+        'img_aspect_ratio': payload.get('img_aspect_ratio', ''),
         'generate_count': str(payload.get('generate_count', '1')),
         'uploaded_images': payload.get('uploaded_images', [])[:4],
         'updated_at': utc_now_iso(),
@@ -311,6 +413,235 @@ def get_image_mime_type(image_path):
     }
     return mime_types.get(ext, "image/png")
 
+
+IMAGE_SIZE_PRESETS = {
+    '512': {
+        '1:1': (512, 512),
+        '16:9': (896, 512),
+        '9:16': (512, 896),
+        '4:3': (640, 480),
+        '3:4': (480, 640),
+    },
+    '1K': {
+        '1:1': (1024, 1024),
+        '16:9': (1280, 720),
+        '9:16': (720, 1280),
+        '4:3': (1024, 768),
+        '3:4': (768, 1024),
+    },
+    '2K': {
+        '1:1': (2048, 2048),
+        '16:9': (2048, 1152),
+        '9:16': (1152, 2048),
+        '4:3': (2048, 1536),
+        '3:4': (1536, 2048),
+    },
+    '4K': {
+        '1:1': (2048, 2048),
+        '16:9': (3840, 2160),
+        '9:16': (2160, 3840),
+        '4:3': (3264, 2448),
+        '3:4': (2448, 3264),
+    },
+}
+
+
+def get_target_dimensions(size_label, aspect_ratio):
+    return IMAGE_SIZE_PRESETS.get(size_label, {}).get(aspect_ratio)
+
+
+def normalize_gemini_image_size(resolution):
+    resolution_map = {
+        '512 (512x512)': '512',
+        '1K (1024x1024)': '1K',
+        '2K (2048x2048)': '2K',
+        '4K (4096x4096)': '4K',
+    }
+    value = (resolution or '').strip()
+    if not value or value.lower() in {'auto', 'none', 'default'}:
+        return None
+    return resolution_map.get(value, value if value in IMAGE_SIZE_PRESETS else None)
+
+
+def normalize_gemini_aspect_ratio(aspect_ratio):
+    value = (aspect_ratio or '').strip()
+    if not value or value.lower() in {'auto', 'none', 'default'}:
+        return None
+    return value if value in {'1:1', '16:9', '9:16', '4:3', '3:4'} else None
+
+
+def build_gemini_generation_config(image_size=None, aspect_ratio=None):
+    config = {'responseModalities': GEMINI_RESPONSE_MODALITIES or ['TEXT', 'IMAGE']}
+    image_config = {}
+    if aspect_ratio:
+        image_config['aspectRatio'] = aspect_ratio
+    if image_size:
+        image_config['imageSize'] = image_size
+    if image_config:
+        config['imageConfig'] = image_config
+    return config
+
+
+def build_gemini_payload(parts, image_size=None, aspect_ratio=None):
+    return {
+        'contents': [{
+            'role': 'user',
+            'parts': parts,
+        }],
+        'generationConfig': build_gemini_generation_config(image_size, aspect_ratio),
+    }
+
+
+def get_gpt_timeout_fallback_size(size, aspect_ratio):
+    if not ENABLE_IMAGE_TIMEOUT_FALLBACK:
+        return None
+    fallback_dimensions = get_target_dimensions('1K', aspect_ratio)
+    if not fallback_dimensions:
+        return None
+    fallback_size = f'{fallback_dimensions[0]}x{fallback_dimensions[1]}'
+    return fallback_size if fallback_size != size else None
+
+
+def parse_image_size(size):
+    match = re.fullmatch(r'(\d+)x(\d+)', (size or '').strip())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def should_retry_gemini_at_1k(image_size):
+    return ENABLE_IMAGE_TIMEOUT_FALLBACK and image_size in {'2K', '4K'}
+
+
+def resize_image_to_target(image, target_size):
+    if not target_size or image.size == target_size:
+        return image
+    if image.mode not in ('RGB', 'RGBA'):
+        image = image.convert('RGB')
+    return image.resize(target_size, Image.Resampling.LANCZOS)
+
+
+def resize_saved_image_to_target(image_path, target_size):
+    if not target_size:
+        return
+    image = Image.open(image_path)
+    image = resize_image_to_target(image, target_size)
+    image.save(image_path)
+
+
+def summarize_html_error(text):
+    if not text:
+        return ''
+
+    for pattern in (
+        r'<title[^>]*>(.*?)</title>',
+        r'<h1[^>]*>(.*?)</h1>',
+    ):
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            summary = re.sub(r'<[^>]+>', ' ', match.group(1))
+            summary = html_lib.unescape(re.sub(r'\s+', ' ', summary)).strip()
+            if summary:
+                return summary[:200]
+
+    stripped = re.sub(r'<[^>]+>', ' ', text)
+    stripped = html_lib.unescape(re.sub(r'\s+', ' ', stripped)).strip()
+    return stripped[:200]
+
+
+def make_upstream_error_payload(response, service_name='Upstream'):
+    detail = summarize_upstream_error(response)
+    status_code = response.status_code
+    if status_code == 524:
+        message = (
+            f'{service_name} returned Cloudflare 524 timeout. '
+            '2K/4K image generation is taking longer than the proxy allows.'
+        )
+    elif status_code in {401, 403}:
+        message = f'{service_name} authentication failed. Check the API key.'
+    elif status_code == 413:
+        message = f'{service_name} rejected the request as too large.'
+    elif status_code in {502, 504}:
+        message = f'{service_name} gateway timeout or temporary upstream failure (HTTP {status_code}).'
+    elif status_code == 500:
+        message = f'{service_name} server error (HTTP 500).'
+    else:
+        message = f'{service_name} request failed (HTTP {status_code}).'
+    return {
+        'success': False,
+        'message': message,
+        'status_code': status_code,
+        'detail': detail,
+    }
+
+
+def forward_gemini_error_response(response):
+    payload = make_upstream_error_payload(response, 'Gemini upstream')
+    return jsonify(payload), response.status_code
+
+
+def iter_gemini_auth_headers(api_key):
+    token = (api_key or '').strip()
+    if not token:
+        return []
+
+    plain_token = token[7:].strip() if token.lower().startswith('bearer ') else token
+    candidates = []
+
+    def add(headers):
+        if headers and headers not in candidates:
+            candidates.append(headers)
+
+    add({'Authorization': token if token.lower().startswith('bearer ') else f'Bearer {token}'})
+    add({'X-Goog-Api-Key': plain_token})
+    return candidates
+
+
+def send_gemini_request(method, url, api_key, **kwargs):
+    base_headers = dict(kwargs.pop('headers', {}) or {})
+    auth_header_candidates = iter_gemini_auth_headers(api_key)
+
+    last_response = None
+    last_exception = None
+    for index, auth_headers in enumerate(auth_header_candidates):
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers={**base_headers, **auth_headers},
+                **kwargs,
+            )
+        except requests.RequestException as exc:
+            last_exception = exc
+            if index == len(auth_header_candidates) - 1:
+                raise
+            continue
+
+        last_response = response
+        if response.status_code not in {401, 403} or index == len(auth_header_candidates) - 1:
+            return response
+
+    if last_response is not None:
+        return last_response
+    if last_exception is not None:
+        raise last_exception
+    raise requests.RequestException('Gemini request failed without a response')
+
+
+def post_gemini_with_timeout_fallback(url, payload, api_key, requested_size):
+    headers = {"Content-Type": "application/json"}
+    response = send_gemini_request('POST', url, api_key, json=payload, headers=headers, timeout=API_TIMEOUT)
+    if response.status_code != 524 or not should_retry_gemini_at_1k(requested_size):
+        return response, False
+
+    logging.warning('[524] Gemini upstream timed out at %s; retrying at 1K fallback', requested_size)
+    fallback_payload = copy.deepcopy(payload)
+    image_config = fallback_payload.get('generationConfig', {}).get('imageConfig')
+    if not isinstance(image_config, dict):
+        return response, False
+    image_config['imageSize'] = '1K'
+    fallback_response = send_gemini_request('POST', url, api_key, json=fallback_payload, headers=headers, timeout=API_TIMEOUT)
+    return fallback_response, fallback_response.status_code < 400
 
 
 
@@ -668,15 +999,13 @@ def get_uploaded_image_files(files):
 
 def summarize_upstream_error(response):
     content_type = (response.headers.get('Content-Type') or '').lower()
-    if 'text/html' in content_type:
-        match = re.search(r'<title>([^<]+)</title>', response.text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        return response.text[:200]
+    text = response.text or ''
+    if 'text/html' in content_type or '<html' in text[:500].lower():
+        return summarize_html_error(text)
     try:
         return response.json()
     except Exception:
-        return response.text[:500]
+        return text[:500]
 
 
 def build_gpt_compatible_text_payload(model, prompt):
@@ -803,7 +1132,7 @@ def save_gpt_images(session_id, image_urls, prefix, prompt):
     return saved_files
 
 
-def save_gpt_image_items(session_id, image_items, prefix, prompt):
+def save_gpt_image_items(session_id, image_items, prefix, prompt, target_size=None):
     session_dir = get_gpt_session_dir(session_id)
     saved_files = []
     timestamp = int(time.time())
@@ -815,6 +1144,7 @@ def save_gpt_image_items(session_id, image_items, prefix, prompt):
             save_base64_image_to_session(image_item['value'], output_path)
         else:
             continue
+        resize_saved_image_to_target(output_path, target_size)
         saved_files.append(output_path.name)
     if saved_files:
         last_path = session_dir / saved_files[0]
@@ -1020,23 +1350,8 @@ def fetch_video_models(api_key, base_url):
 
 
 def forward_error_response(response):
-    detail = summarize_upstream_error(response)
-    if response.status_code == 524:
-        message = 'Upstream image request timed out (524). Try a smaller size or a shorter prompt.'
-    elif response.status_code in {401, 403}:
-        message = 'Upstream authentication failed. Check the API key and Authorization format.'
-    elif response.status_code == 413:
-        message = 'Upstream rejected the request as too large. Try a smaller image size or a shorter prompt.'
-    else:
-        message = f'Upstream request failed (HTTP {response.status_code}).'
-    return jsonify(
-        {
-            'success': False,
-            'message': message,
-            'status_code': response.status_code,
-            'detail': detail,
-        }
-    ), response.status_code
+    payload = make_upstream_error_payload(response, 'GPT image upstream')
+    return jsonify(payload), response.status_code
 
 
 @app.route('/')
@@ -1199,6 +1514,45 @@ def delete_gemini_image_result():
     return set_session_cookie(response, session_id)
 
 
+@app.route('/api/gemini-image/tasks', methods=['POST'])
+def create_gemini_image_task():
+    session_id = get_session_id()
+    data = request.get_json(silent=True) or {}
+    mode = (data.get('mode') or 'text').strip().lower()
+    payload = data.get('payload') if isinstance(data.get('payload'), dict) else data
+
+    if mode not in {'text', 'image'}:
+        return jsonify({'success': False, 'message': 'Invalid Gemini task mode'}), 400
+    if not payload.get('api_key'):
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+    if not payload.get('prompt'):
+        return jsonify({'success': False, 'message': '请填写提示词'}), 400
+    if mode == 'image' and not payload.get('image_data_list'):
+        return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
+
+    task = create_gemini_task(session_id, mode, payload)
+    response = jsonify({
+        'success': True,
+        'task_id': task['task_id'],
+        'status': task['status'],
+        'message': '任务已提交，后台正在生成。',
+    })
+    return set_session_cookie(response, session_id)
+
+
+@app.route('/api/gemini-image/tasks/<task_id>', methods=['GET'])
+def get_gemini_image_task(task_id):
+    task = get_gemini_task(task_id)
+    if not task:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+    session_id = get_session_id()
+    if task.get('session_id') != session_id:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+    task_payload = dict(task)
+    task_payload['task_success'] = bool(task_payload.pop('success', False))
+    return jsonify({'success': True, **task_payload})
+
+
 @app.route('/api/gpt-image/session', methods=['GET', 'POST'])
 def get_gpt_image_session():
     session_id = get_gpt_session_id()
@@ -1277,8 +1631,7 @@ def get_models():
     
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models"
-        headers = {"X-Goog-Api-Key": api_key.strip()}
-        response = requests.get(url, headers=headers, timeout=15)
+        response = send_gemini_request('GET', url, api_key, timeout=15)
         response.raise_for_status()
         data = response.json()
         models = []
@@ -1306,8 +1659,7 @@ def test_connection():
 
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models"
-        headers = {"X-Goog-Api-Key": api_key.strip()}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = send_gemini_request('GET', url, api_key, timeout=10)
         if response.status_code == 200:
             return jsonify({'success': True, 'message': f'Connection successful: {base_url}'})
         return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
@@ -1377,18 +1729,11 @@ def text_to_image():
     prompt = data.get('prompt', '')
     negative_prompt = data.get('negative_prompt', '')
     image_count = int(data.get('image_count', 1))
-    resolution = data.get('resolution', '1K (1024x1024)')
-    aspect_ratio = data.get('aspect_ratio', '1:1')
+    resolution = data.get('resolution', '')
+    aspect_ratio = data.get('aspect_ratio', '')
     use_last_image = data.get('use_last_image', False)
-    
-    # 杞崲鍒嗚鲸鐜囨牸寮忥細 "1K (1024x1024)" -> "1K"
-    resolution_map = {
-        '512 (512x512)': '512',
-        '1K (1024x1024)': '1K',
-        '2K (2048x2048)': '2K',
-        '4K (4096x4096)': '4K'
-    }
-    image_size = resolution_map.get(resolution, '1K')
+    image_size = normalize_gemini_image_size(resolution)
+    aspect_ratio = normalize_gemini_aspect_ratio(aspect_ratio)
     
     # 璋冭瘯鏃ュ織
     logging.info("=" * 50)
@@ -1413,13 +1758,9 @@ def text_to_image():
     try:
         logging.info("[DEBUG] Calling upstream API")
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": api_key.strip()
-        }
-        
         output_paths = []
         generation_stamp = int(time.time() * 1000)
+        used_timeout_fallback = False
         
         for i in range(image_count):
             logging.info(f"[DEBUG] Starting generation loop {i+1}")
@@ -1433,34 +1774,22 @@ def text_to_image():
                 base64_image = encode_image_to_base64(last_image, max_size=512, jpeg_quality=75)
                 mime_type = get_image_mime_type(last_image)
                 
-                payload = {
-                    "contents": [{
-                        "parts": [
-                            {"inlineData": {"mimeType": mime_type, "data": base64_image}},
-                            {"text": prompt}
-                        ]
-                    }],
-                    "generationConfig": {
-                        "responseModalities": ["IMAGE"],
-                        "imageConfig": {
-                            "aspectRatio": aspect_ratio,
-                            "imageSize": image_size
-                        }
-                    }
-                }
+                payload = build_gemini_payload(
+                    [
+                        {"inlineData": {"mimeType": mime_type, "data": base64_image}},
+                        {"text": prompt},
+                    ],
+                    image_size=image_size,
+                    aspect_ratio=aspect_ratio,
+                )
             else:
                 logging.info("[DEBUG] Using text-only generation mode")
                 # 绾枃鐢熷浘妯″紡
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseModalities": ["IMAGE"],
-                        "imageConfig": {
-                            "aspectRatio": aspect_ratio,
-                            "imageSize": image_size
-                        }
-                    }
-                }
+                payload = build_gemini_payload(
+                    [{"text": prompt}],
+                    image_size=image_size,
+                    aspect_ratio=aspect_ratio,
+                )
             
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
@@ -1472,7 +1801,8 @@ def text_to_image():
             # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
             try:
                 logging.info(f"[DEBUG] Sending request to {url}")
-                response = requests.post(url, json=payload, headers=headers, timeout=API_TIMEOUT)
+                response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
+                used_timeout_fallback = used_timeout_fallback or response_used_fallback
                 logging.info(f"[DEBUG] Response status: {response.status_code}")
                 logging.info(f"[DEBUG] 鍝嶅簲澶达細{dict(response.headers)}")
                 if response.status_code >= 400:
@@ -1485,24 +1815,9 @@ def text_to_image():
                 logging.error(f"[ERROR] Exception type: {type(e).__name__}")
                 return jsonify({'success': False, 'message': f'鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撳け璐ワ細{str(e)}'})
             
-            # 澶勭悊鐗规畩閿欒鐮?
-            if response.status_code == 413:
-                logging.error("[413] Request too large")
-                return jsonify({'success': False, 'message': 'Request too large (413)'})
-            
-            if response.status_code == 502:
-                logging.error(f"[502] Bad Gateway - Gemini API 杩斿洖绌哄搷搴旀垨杩炴帴鏂紑")
-                logging.error(f"[502] 鍙兘鍘熷洜锛?)Gemini 闄愭祦 2)Gemini 鏈嶅姟娉㈠姩 3)璇锋眰浣撳お澶ц鍒囨柇")
-                return jsonify({'success': False, 'message': '鈿狅笍 缃戝叧閿欒 (502) - Gemini API 杩斿洖绌哄搷搴旓紝鍙兘鏄檺娴佹垨鏈嶅姟娉㈠姩锛岃绋嶅悗閲嶈瘯'})
-            
-            if response.status_code == 504:
-                logging.error(f"[504] 缃戝叧瓒呮椂 - 涓婃父鍙兘浠嶅湪澶勭悊鎴栧凡鎴愬姛")
-                return jsonify({'success': False, 'message': 'Gateway timeout (504)'})
-            
-            if response.status_code == 500:
-                logging.error(f"[500] 鏈嶅姟鍣ㄩ敊璇?- 鍙兘鏄?HTTP/2 stream 閿欒")
-                return jsonify({'success': False, 'message': 'Upstream server error (500)'})
-            
+            if response.status_code >= 400:
+                return forward_gemini_error_response(response)
+
             response.raise_for_status()
             result = response.json()
             
@@ -1520,6 +1835,8 @@ def text_to_image():
                         if mime_type.startswith("image/"):
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
                             
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1540,6 +1857,8 @@ def text_to_image():
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
                             
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1561,6 +1880,8 @@ def text_to_image():
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
                             
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1573,10 +1894,13 @@ def text_to_image():
         
         if output_paths:
             append_gemini_history(session_id, 'text', prompt, output_paths)
+            message = f'生成成功 {len(output_paths)} 张！'
+            if used_timeout_fallback:
+                message += ' 上游 2K/4K 超时，已用 1K 兜底生成并本地放大。'
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
-                'message': f'生成成功 {len(output_paths)} 张！'
+                'message': message
             })
         
         return jsonify({'success': False, 'message': 'No image data found'})
@@ -1599,18 +1923,12 @@ def image_to_image():
     prompt = data.get('prompt', '')
     negative_prompt = data.get('negative_prompt', '')
     image_count = int(data.get('image_count', 1))
-    resolution = data.get('resolution', '1K (1024x1024)')
-    aspect_ratio = data.get('aspect_ratio', '1:1')
+    resolution = data.get('resolution', '')
+    aspect_ratio = data.get('aspect_ratio', '')
     image_data_list = data.get('image_data_list', [])  # base64 鍒楄〃锛屾敮鎸佸寮?
 
-    # 杞崲鍒嗚鲸鐜囨牸寮忥細 "1K (1024x1024)" -> "1K"
-    resolution_map = {
-        '512 (512x512)': '512',
-        '1K (1024x1024)': '1K',
-        '2K (2048x2048)': '2K',
-        '4K (4096x4096)': '4K'
-    }
-    image_size = resolution_map.get(resolution, '1K')
+    image_size = normalize_gemini_image_size(resolution)
+    aspect_ratio = normalize_gemini_aspect_ratio(aspect_ratio)
 
     # 璋冭瘯鏃ュ織
     logging.info(f"[DEBUG] 鍥剧敓鍥撅細image_size={image_size}, aspect_ratio={aspect_ratio}, 鍙傝€冨浘鏁伴噺={len(image_data_list)}")
@@ -1639,11 +1957,6 @@ def image_to_image():
 
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": api_key.strip()
-        }
-
         # 瑙ｆ瀽涓婁紶鐨勬墍鏈夊浘鐗囷紝缂栫爜涓?base64
         encoded_images = []
         for img_data in image_data_list:
@@ -1656,6 +1969,7 @@ def image_to_image():
 
         output_paths = []
         generation_stamp = int(time.time() * 1000)
+        used_timeout_fallback = False
 
         for i in range(image_count):
             # 鏋勫缓 parts 鍒楄〃锛氭墍鏈夊弬鑰冨浘 + 鎻愮ず璇?
@@ -1664,25 +1978,19 @@ def image_to_image():
                 parts.append({"inlineData": {"mimeType": "image/jpeg", "data": encoded_img}})
             parts.append({"text": prompt})
 
-            payload = {
-                "contents": [{
-                    "parts": parts
-                }],
-                "generationConfig": {
-                    "responseModalities": ["IMAGE"],
-                    "imageConfig": {
-                        "aspectRatio": aspect_ratio,
-                        "imageSize": image_size
-                    }
-                }
-            }
+            payload = build_gemini_payload(
+                parts,
+                image_size=image_size,
+                aspect_ratio=aspect_ratio,
+            )
 
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
 
             # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
             try:
-                response = requests.post(url, json=payload, headers=headers, timeout=API_TIMEOUT)
+                response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
+                used_timeout_fallback = used_timeout_fallback or response_used_fallback
             except requests.exceptions.Timeout:
                 logging.error(f"[TIMEOUT] 璇锋眰瓒呮椂")
                 return jsonify({'success': False, 'message': '鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撹秴鏃讹紝璇锋鏌ヤ笂娓告槸鍚﹀凡鐢熸垚鍥剧墖'})
@@ -1695,23 +2003,8 @@ def image_to_image():
             if response.status_code >= 400:
                 logging.error(f"[DEBUG] 鍝嶅簲浣擄細{response.text[:500]}")
 
-            # 澶勭悊鐗规畩閿欒鐮?
-            if response.status_code == 413:
-                logging.error(f"[413] 璇锋眰澶ぇ")
-                return jsonify({'success': False, 'message': 'Request too large (413)'})
-
-            if response.status_code == 502:
-                logging.error(f"[502] Bad Gateway - Gemini API 杩斿洖绌哄搷搴旀垨杩炴帴鏂紑")
-                logging.error(f"[502] 鍙兘鍘熷洜锛?)Gemini 闄愭祦 2)Gemini 鏈嶅姟娉㈠姩 3)璇锋眰浣撳お澶ц鍒囨柇")
-                return jsonify({'success': False, 'message': '鈿狅笍 缃戝叧閿欒 (502) - Gemini API 杩斿洖绌哄搷搴旓紝鍙兘鏄檺娴佹垨鏈嶅姟娉㈠姩锛岃绋嶅悗閲嶈瘯'})
-
-            if response.status_code == 504:
-                logging.error(f"[504] 缃戝叧瓒呮椂")
-                return jsonify({'success': False, 'message': 'Gateway timeout (504)'})
-
-            if response.status_code == 500:
-                logging.error("[500] Upstream server error")
-                return jsonify({'success': False, 'message': 'Upstream server error (500)'})
+            if response.status_code >= 400:
+                return forward_gemini_error_response(response)
 
             response.raise_for_status()
             result = response.json()
@@ -1728,6 +2021,8 @@ def image_to_image():
                         if mime_type.startswith("image/"):
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
 
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1748,6 +2043,8 @@ def image_to_image():
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
 
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1769,6 +2066,8 @@ def image_to_image():
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
+                            if response_used_fallback:
+                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
 
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
@@ -1781,10 +2080,13 @@ def image_to_image():
 
         if output_paths:
             append_gemini_history(session_id, 'image', prompt, output_paths)
+            message = f'生成成功 {len(output_paths)} 张！'
+            if used_timeout_fallback:
+                message += ' 上游 2K/4K 超时，已用 1K 兜底生成并本地放大。'
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
-                'message': f'生成成功 {len(output_paths)} 张！'
+                'message': message
             })
 
         return jsonify({'success': False, 'message': 'No image data found'})
@@ -1822,6 +2124,8 @@ def gpt_image_generate():
         return jsonify({'success': False, 'message': 'Compatible mode only supports 1 image'}), 400
 
     try:
+        used_timeout_fallback = False
+        resize_target = None
         if interface_mode == 'compatible':
             response = send_gpt_request(
                 'POST',
@@ -1835,30 +2139,48 @@ def gpt_image_generate():
             payload = response.json()
             image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
         else:
+            request_payload = {
+                'model': model,
+                'prompt': prompt_with_layout,
+                'n': image_count,
+                'size': size,
+                'quality': quality,
+            }
             response = send_gpt_request(
                 'POST',
                 f'{base_url}/v1/images/generations',
                 api_key,
-                json={
-                    'model': model,
-                    'prompt': prompt_with_layout,
-                    'n': image_count,
-                    'size': size,
-                    'quality': quality,
-                },
+                json=request_payload,
                 timeout=API_TIMEOUT,
             )
+            fallback_size = get_gpt_timeout_fallback_size(size, aspect_ratio)
+            if response.status_code == 524 and fallback_size:
+                logging.warning('[524] GPT image upstream timed out at %s; retrying at %s fallback', size, fallback_size)
+                fallback_payload = {**request_payload, 'size': fallback_size}
+                response = send_gpt_request(
+                    'POST',
+                    f'{base_url}/v1/images/generations',
+                    api_key,
+                    json=fallback_payload,
+                    timeout=API_TIMEOUT,
+                )
+                if response.status_code < 400:
+                    used_timeout_fallback = True
+                    resize_target = parse_image_size(size)
             if response.status_code >= 400:
                 return forward_error_response(response)
             payload = response.json()
             image_items = parse_gpt_image_items(payload)
         if not image_items:
             return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
-        saved_files = save_gpt_image_items(session_id, image_items, 'generate', prompt)
+        saved_files = save_gpt_image_items(session_id, image_items, 'generate', prompt, target_size=resize_target)
+        message = f'生成成功 {len(saved_files)} 张！'
+        if used_timeout_fallback:
+            message += ' 上游 2K/4K 超时，已用较小尺寸兜底生成并本地放大。'
         result = jsonify({
             'success': True,
             'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
-            'message': f'生成成功 {len(saved_files)} 张！',
+            'message': message,
             'session': build_gpt_session_payload(session_id),
         })
         return set_gpt_session_cookie(result, session_id)
@@ -1901,6 +2223,8 @@ def gpt_image_edit():
     outbound_streams = []
     local_reference_paths = []
     try:
+        used_timeout_fallback = False
+        resize_target = None
         if use_last and not uploaded_files:
             state = load_gpt_session_state(session_id)
             last_image = state.get('last_image')
@@ -1945,20 +2269,36 @@ def gpt_image_edit():
             payload = response.json()
             image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
         else:
+            request_data = {
+                'model': model,
+                'prompt': prompt_with_layout,
+                'n': str(image_count),
+                'size': size,
+                'quality': quality,
+            }
             response = send_gpt_request(
                 'POST',
                 f'{base_url}/v1/images/edits',
                 api_key,
-                data={
-                    'model': model,
-                    'prompt': prompt_with_layout,
-                    'n': str(image_count),
-                    'size': size,
-                    'quality': quality,
-                },
+                data=request_data,
                 files=outbound_files,
                 timeout=API_TIMEOUT,
             )
+            fallback_size = get_gpt_timeout_fallback_size(size, aspect_ratio)
+            if response.status_code == 524 and fallback_size:
+                logging.warning('[524] GPT image edit upstream timed out at %s; retrying at %s fallback', size, fallback_size)
+                fallback_data = {**request_data, 'size': fallback_size}
+                response = send_gpt_request(
+                    'POST',
+                    f'{base_url}/v1/images/edits',
+                    api_key,
+                    data=fallback_data,
+                    files=outbound_files,
+                    timeout=API_TIMEOUT,
+                )
+                if response.status_code < 400:
+                    used_timeout_fallback = True
+                    resize_target = parse_image_size(size)
             if response.status_code >= 400:
                 return forward_error_response(response)
             payload = response.json()
@@ -1966,11 +2306,14 @@ def gpt_image_edit():
 
         if not image_items:
             return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
-        saved_files = save_gpt_image_items(session_id, image_items, 'edit', prompt)
+        saved_files = save_gpt_image_items(session_id, image_items, 'edit', prompt, target_size=resize_target)
+        message = f'编辑成功 {len(saved_files)} 张！'
+        if used_timeout_fallback:
+            message += ' 上游 2K/4K 超时，已用较小尺寸兜底生成并本地放大。'
         result = jsonify({
             'success': True,
             'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
-            'message': f'编辑成功 {len(saved_files)} 张！',
+            'message': message,
             'session': build_gpt_session_payload(session_id),
         })
         return set_gpt_session_cookie(result, session_id)

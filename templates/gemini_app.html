@@ -645,7 +645,6 @@
                             <div class="group">
                                 <label for="generateSize">基础尺寸</label>
                                 <select id="generateSize">
-                                    <option value="512 (512x512)">512 / 0.5K</option>
                                     <option value="1K (1024x1024)" selected>1K</option>
                                     <option value="2K (2048x2048)">2K</option>
                                     <option value="4K (4096x4096)">4K / 最大档</option>
@@ -708,7 +707,6 @@
                             <div class="group">
                                 <label for="editSize">输出尺寸</label>
                                 <select id="editSize">
-                                    <option value="512 (512x512)">512 / 0.5K</option>
                                     <option value="1K (1024x1024)" selected>1K</option>
                                     <option value="2K (2048x2048)">2K</option>
                                     <option value="4K (4096x4096)">4K / 最大档</option>
@@ -1445,6 +1443,54 @@
             }
         }
 
+        function delay(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        async function submitGeminiTask(mode, payload, statusId) {
+            const response = await fetch('/api/gemini-image/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode, payload }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || result.error || '任务提交失败');
+            }
+            showStatus(statusId, '任务已提交，后台正在生成...', 'loading');
+            return pollGeminiTask(result.task_id, statusId);
+        }
+
+        async function pollGeminiTask(taskId, statusId) {
+            const startedAt = Date.now();
+            for (let attempt = 0; attempt < 720; attempt += 1) {
+                await delay(attempt === 0 ? 800 : 2000);
+                const response = await fetch(`/api/gemini-image/tasks/${encodeURIComponent(taskId)}`);
+                const task = await response.json();
+                if (!response.ok || !task.success) {
+                    throw new Error(task.message || '任务状态查询失败');
+                }
+
+                const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+                if (task.status === 'queued') {
+                    showStatus(statusId, `任务排队中... ${elapsed}s`, 'loading');
+                    continue;
+                }
+                if (task.status === 'running') {
+                    showStatus(statusId, `后台生成中... ${elapsed}s`, 'loading');
+                    continue;
+                }
+                if (task.status === 'succeeded') {
+                    return task.result || {};
+                }
+                if (task.status === 'failed') {
+                    const error = task.error || {};
+                    throw new Error(error.message || error.error || task.message || '生成失败');
+                }
+            }
+            throw new Error('任务仍在后台运行，请稍后刷新结果。');
+        }
+
         async function submitGeminiWorkflow() {
             const workflow = getWorkflowValues();
             const statusId = getWorkflowStatusId();
@@ -1530,6 +1576,73 @@
             }
         }
 
+        async function submitGeminiWorkflowAsync() {
+            const workflow = getWorkflowValues();
+            const statusId = getWorkflowStatusId();
+            const buttonId = 'generateButton';
+            resetStatus(statusId);
+            setBusy(buttonId, true, '正在生成图片...', '开始生成');
+
+            if (!workflow.prompt) {
+                showStatus(statusId, '请先填写提示词。', 'error');
+                setBusy(buttonId, false, '正在生成图片...', '开始生成');
+                return;
+            }
+
+            if (!hasWorkflowReferences()) {
+                const payload = {
+                    ...getConfig(),
+                    prompt: workflow.prompt,
+                    negative_prompt: workflow.negative_prompt,
+                    image_count: workflow.image_count,
+                    resolution: workflow.resolution,
+                    aspect_ratio: workflow.aspect_ratio,
+                    use_last_image: false,
+                };
+                showStatus(statusId, '正在提交后台文生图任务...', 'loading');
+                try {
+                    await saveGeminiDraft();
+                    const result = await submitGeminiTask('text', payload, statusId);
+                    renderResultImages(result.images || []);
+                    showStatus(statusId, result.message || '生成成功', 'success');
+                    await refreshGeminiSession();
+                } catch (error) {
+                    showStatus(statusId, `生成失败：${error.message}`, 'error');
+                } finally {
+                    setBusy(buttonId, false, '正在生成图片...', '开始生成');
+                }
+                return;
+            }
+
+            showStatus(statusId, '正在提交后台图生图任务...', 'loading');
+            try {
+                await saveGeminiDraft();
+                const imageDataList = state.editImages.slice(0, 4);
+                if (state.useLastImage && state.lastImageUrl) {
+                    imageDataList.unshift(await imageUrlToDataURL(state.lastImageUrl));
+                }
+
+                const payload = {
+                    ...getConfig(),
+                    prompt: workflow.prompt,
+                    negative_prompt: workflow.negative_prompt,
+                    image_count: workflow.image_count,
+                    resolution: workflow.resolution,
+                    aspect_ratio: workflow.aspect_ratio,
+                    image_data_list: imageDataList.slice(0, 4),
+                };
+
+                const result = await submitGeminiTask('image', payload, statusId);
+                renderResultImages(result.images || []);
+                showStatus(statusId, result.message || '编辑成功', 'success');
+                await refreshGeminiSession();
+            } catch (error) {
+                showStatus(statusId, `编辑失败：${error.message}`, 'error');
+            } finally {
+                setBusy(buttonId, false, '正在生成图片...', '开始生成');
+            }
+        }
+
         document.getElementById('testConnectionButton').addEventListener('click', testConnection);
         document.getElementById('fetchModelsButton').addEventListener('click', fetchModels);
         document.getElementById('modelInput').addEventListener('input', () => {
@@ -1555,7 +1668,7 @@
         document.getElementById('refreshSessionButton').addEventListener('click', refreshGeminiSession);
         document.getElementById('refreshResultsButton').addEventListener('click', refreshGeminiSession);
         document.getElementById('clearSessionButton').addEventListener('click', clearGeminiSession);
-        document.getElementById('generateButton').addEventListener('click', submitGeminiWorkflow);
+        document.getElementById('generateButton').addEventListener('click', submitGeminiWorkflowAsync);
         document.getElementById('openStepsDialogButton').addEventListener('click', () => openInfoDialog('stepsDialog'));
         document.getElementById('openSessionDialogButton').addEventListener('click', () => openInfoDialog('sessionDialog'));
         [
