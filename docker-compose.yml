@@ -1,8 +1,8 @@
 services:
   video-image-tool:
-    # image: video-image-tool-v4:latest
-    # build: .
     image: milodk/video-image-tool-v4:latest
+    build: .
+    # image: milodk/video-image-tool-v4:latest
     container_name: video-image-tool-v4
     ports:
       - "7863:7860"
@@ -12,7 +12,7 @@ services:
     environment:
       - OUTPUT_DIR=/app/output
       - SESSIONS_DIR=/app/sessions
-      - DEFAULT_BASE_URL=https://lnapi.com
+      - DEFAULT_BASE_URL=https://moai.wiki
       - DEFAULT_MODEL=gemini-3.1-flash-image-preview-2k
       - GEMINI_RESPONSE_MODALITIES=TEXT,IMAGE
       - ENABLE_IMAGE_TIMEOUT_FALLBACK=false

@@ -447,9 +447,6 @@
                             <div class="group">
                                 <div class="field-head">
                                     <label for="seconds">视频时长</label>
-                                    <div class="inline-toggle">
-                                        <input id="enableSeconds" type="checkbox" title="传递 seconds 参数">
-                                    </div>
                                 </div>
                                 <select id="seconds">
                                     <option value="6">6 秒</option>
@@ -549,12 +546,11 @@
         const state = { references: [], saveTimer: null };
         const tabs = document.querySelectorAll(".tab");
         const tabPanels = document.querySelectorAll(".tab-panel");
-        const secondsToggle = document.getElementById("enableSeconds");
         const secondsSelect = document.getElementById("seconds");
 
         function syncSecondsField() {
-            secondsSelect.disabled = !secondsToggle.checked;
-            secondsSelect.style.opacity = secondsToggle.checked ? "1" : "0.45";
+            secondsSelect.disabled = false;
+            secondsSelect.style.opacity = "1";
         }
 
         tabs.forEach((tab) => {
@@ -564,10 +560,6 @@
                 tab.classList.add("active");
                 document.getElementById(tab.dataset.tab).classList.add("active");
             });
-        });
-        secondsToggle.addEventListener("change", () => {
-            syncSecondsField();
-            scheduleDraftSave();
         });
         syncSecondsField();
 
@@ -585,8 +577,8 @@
                 size: document.getElementById("size").value,
                 quality: document.getElementById("quality").value,
                 model: document.getElementById("model").value,
-                seconds: document.getElementById("seconds").value,
-                enable_seconds: secondsToggle.checked,
+                seconds: document.getElementById("seconds").value || "6",
+                enable_seconds: true,
                 references: state.references,
             };
         }
@@ -622,9 +614,10 @@
                 }
                 modelSelect.value = draft.model;
             }
-            secondsToggle.checked = Boolean(draft.enable_seconds);
             if (draft.seconds) {
                 document.getElementById("seconds").value = draft.seconds;
+            } else {
+                document.getElementById("seconds").value = "6";
             }
             state.references = Array.isArray(draft.references) ? draft.references : [];
             syncSecondsField();
@@ -798,13 +791,14 @@
 
         function taskCard(task, index) {
             const hasVideo = Boolean(task.video_url);
+            const taskLookupId = task.task_id || task.video_id || "";
             const secondsText = task.seconds ? `${task.seconds}s` : "6s";
             const previewId = `videoPreview-${index}`;
             return `
                 <article class="task-card">
                     <div class="task-head">
                         <div>
-                            <div class="task-id">${task.video_id || task.task_id || "-"}</div>
+                            <div class="task-id">${task.task_id || task.video_id || "-"}</div>
                             <p class="task-prompt">${task.prompt || "未记录提示词"}</p>
                         </div>
                         <div class="status-pill ${statusClass(task.status)}">${statusLabel(task.status)}</div>
@@ -816,12 +810,12 @@
                         <div class="meta-chip"><span>时长 / 质量</span><strong>${secondsText} / ${task.quality || "-"}</strong></div>
                     </div>
                     <div class="task-actions">
-                        <button type="button" class="btn-query" data-id="${task.video_id || task.task_id}">查询进度</button>
+                        <button type="button" class="btn-query" data-id="${taskLookupId}">查询进度</button>
                         ${hasVideo ? `<button type="button" class="btn-query btn-video-link" data-url="${task.video_url}">获取视频地址</button>` : ""}
-                        ${hasVideo ? `<button type="button" class="btn-query btn-video-preview" data-preview-id="${previewId}">预览视频</button>` : ""}
+                        ${hasVideo ? `<button type="button" class="btn-query btn-video-preview" data-preview-id="${previewId}" data-url="${task.video_url}">预览视频</button>` : ""}
                     </div>
                     ${task.error ? `<div class="hint" style="margin-top:12px;color:#b91c1c;">错误信息: ${task.error}</div>` : ""}
-                    ${hasVideo ? `<video id="${previewId}" controls src="${task.video_url}" style="display:none;"></video>` : ""}
+                    ${hasVideo ? `<video id="${previewId}" controls preload="metadata" src="${task.video_url}" style="display:none;width:100%;margin-top:14px;border-radius:16px;background:#000;"></video>` : ""}
                 </article>
             `;
         }
@@ -832,7 +826,19 @@
             const shouldShow = video.style.display === "none";
             video.style.display = shouldShow ? "block" : "none";
             button.textContent = shouldShow ? "隐藏视频" : "预览视频";
-            if (!shouldShow) video.pause();
+            if (!shouldShow) {
+                video.pause();
+                return;
+            }
+            video.onerror = () => {
+                video.style.display = "none";
+                button.textContent = "预览视频";
+                alert("内嵌预览失效，已为你打开视频地址。");
+                if (button.dataset.url) {
+                    window.open(button.dataset.url, "_blank", "noopener,noreferrer");
+                }
+            };
+            video.load();
         }
 
         async function loadTasks() {
@@ -878,7 +884,6 @@
                 document.getElementById("prompt").value = "";
                 document.getElementById("size").value = "1024x1792";
                 document.getElementById("quality").value = "high";
-                secondsToggle.checked = false;
                 document.getElementById("seconds").value = "6";
                 state.references = [];
                 renderPreviews();
@@ -897,7 +902,7 @@
             const model = document.getElementById("model").value;
             const prompt = document.getElementById("prompt").value.trim();
             const size = document.getElementById("size").value;
-            const seconds = secondsToggle.checked ? document.getElementById("seconds").value : "";
+            const seconds = document.getElementById("seconds").value || "6";
             const quality = document.getElementById("quality").value;
             const submitButton = document.getElementById("submitButton");
 
@@ -912,7 +917,7 @@
             formData.append("model", model);
             formData.append("prompt", prompt);
             formData.append("size", size);
-            if (seconds) formData.append("seconds", seconds);
+            formData.append("seconds", seconds);
             formData.append("quality", quality);
             state.references.forEach((item, index) => {
                 formData.append("input_reference", dataURLToBlob(item.dataURL), `reference_${index + 1}.jpg`);
@@ -946,7 +951,7 @@
             }
             showStatus("configStatus", `正在查询任务 ${shortId(id)} 的最新进度...`, "loading");
             try {
-                const params = new URLSearchParams({ api_key, base_url, video_id: id });
+                const params = new URLSearchParams({ api_key, base_url, task_id: id });
                 const response = await fetch(`/api/video/query?${params.toString()}`);
                 const data = await response.json();
                 if (!response.ok || !data.success) throw new Error(data.message || "查询失败");

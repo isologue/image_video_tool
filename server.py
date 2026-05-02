@@ -1,9 +1,9 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Gemini 鍥剧墖鐢熸垚涓庣紪杈戝伐鍏?- Flask 鐗堟湰 (澶氱敤鎴烽殧绂荤増)
-绾?HTML/CSS/JS 鍓嶇锛孎lask 鍚庣 API
-鏀寔瀹屾暣鐨?Session 闅旂锛岄槻姝㈠鐢ㄦ埛鏁版嵁娣锋穯
+Gemini 图片生成与编辑工具 - Flask 版本 (多用户隔离版)
+纯 HTML/CSS/JS 前端，Flask 后端 API
+支持完整的 Session 隔离，防止多用户数据混淆
 """
 
 import os
@@ -27,7 +27,7 @@ import threading
 from io import BytesIO
 from datetime import datetime, timezone
 
-# 閰嶇疆鏃ュ織杈撳嚭鍒?stdout
+# 配置日志输出到 stdout
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(message)s',
@@ -35,15 +35,15 @@ logging.basicConfig(
     force=True
 )
 
-# API 瓒呮椂閰嶇疆
-API_TIMEOUT = 360  # 6 鍒嗛挓瓒呮椂
+# API 超时配置
+API_TIMEOUT = 360  # 6 分钟超时
 
 app = Flask(__name__)
 
-# 閰嶇疆
+# 配置
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/app/output")
 SESSIONS_DIR = os.getenv("SESSIONS_DIR", "/app/sessions")
-DEFAULT_BASE_URL = os.getenv("DEFAULT_BASE_URL", "https://lnapi.com")
+DEFAULT_BASE_URL = os.getenv("DEFAULT_BASE_URL", "https://moai.wiki")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-3.1-flash-image-preview-2k")
 GEMINI_RESPONSE_MODALITIES = [
     item.strip()
@@ -51,7 +51,7 @@ GEMINI_RESPONSE_MODALITIES = [
     if item.strip()
 ]
 SESSION_COOKIE_NAME = "gemini_session_id"
-SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 澶?
+SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 天
 VIDEO_SESSION_COOKIE_NAME = "video_tool_session_id"
 DEFAULT_VIDEO_BASE_URL = os.getenv("DEFAULT_VIDEO_BASE_URL", DEFAULT_BASE_URL)
 DEFAULT_VIDEO_MODEL = os.getenv("DEFAULT_VIDEO_MODEL", "grok-imagine-1.0-video")
@@ -65,11 +65,11 @@ GPT_IMAGE_SESSION_SUBDIR = "gpt"
 GPT_IMAGE_SESSION_COOKIE_NAME = "gpt_image_session_id"
 
 
-# 纭繚鐩綍瀛樺湪
+# 确保目录存在
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 Path(SESSIONS_DIR).mkdir(parents=True, exist_ok=True)
 
-# 绾跨▼瀹夊叏鐨?Session 鐘舵€佸瓨鍌?
+# 线程安全的 Session 状态存储
 session_states = {}  # {session_id: {"last_image": str, "created_at": float}}
 session_lock = threading.Lock()
 file_lock = threading.Lock()
@@ -78,24 +78,24 @@ gemini_task_lock = threading.Lock()
 
 
 def get_session_id():
-    """浠?Cookie 鑾峰彇鎴栫敓鎴?Session ID"""
+    """从 Cookie 获取或生成 Session ID"""
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     
-    # 楠岃瘉 session_id 鏍煎紡锛堝繀椤绘槸鏈夋晥鐨?UUID锛?
+    # 验证 session_id 格式（必须是有效的 UUID）
     if session_id:
         try:
             uuid.UUID(session_id)
             return session_id
         except ValueError:
-            pass  # 鏃犳晥鐨?UUID锛岀敓鎴愭柊鐨?
+            pass  # 无效的 UUID，生成新的
     
-    # 鐢熸垚鏂扮殑 Session ID
+    # 生成新的 Session ID
     session_id = str(uuid.uuid4())
     return session_id
 
 
 def set_session_cookie(response, session_id):
-    """璁剧疆 Session Cookie"""
+    """设置 Session Cookie"""
     response.set_cookie(
         SESSION_COOKIE_NAME,
         session_id,
@@ -121,11 +121,11 @@ def get_session_state_path(session_id):
 def load_session_state(session_id):
     """Load session state from memory or disk."""
     with session_lock:
-        # 鍏堟鏌ュ唴瀛?
+        # 先检查内存
         if session_id in session_states:
             return session_states[session_id]
         
-        # 浠庢枃浠跺姞杞?
+        # 从文件加载
         state_path = get_session_state_path(session_id)
         if state_path.exists():
             try:
@@ -134,9 +134,9 @@ def load_session_state(session_id):
                 session_states[session_id] = state
                 return state
             except Exception as e:
-                logging.warning(f"鍔犺浇 Session 鐘舵€佸け璐ワ細{e}")
+                logging.warning(f"加载 Session 状态失败：{e}")
         
-        # 鍒涘缓鏂扮姸鎬?
+        # 创建新状态
         state = {
             "last_image": None,
             "created_at": time.time(),
@@ -157,7 +157,7 @@ def save_session_state(session_id, state):
             with open(state_path, 'w') as f:
                 json.dump(state, f, indent=2)
         except Exception as e:
-            logging.error(f"淇濆瓨 Session 鐘舵€佸け璐ワ細{e}")
+            logging.error(f"保存 Session 状态失败：{e}")
 
 
 def create_gemini_task(session_id, mode, payload):
@@ -383,11 +383,11 @@ def save_gemini_draft(session_id, payload):
 
 
 def encode_image_to_base64(image_path, max_size=384, jpeg_quality=60):
-    """灏嗗浘鐗囩紪鐮佷负 base64锛岃嚜鍔ㄥ帇缂?
+    """将图片编码为 base64，自动压缩。
     
-    浼樺寲鍙傛暟鍑忓皯 413 閿欒锛?
-    - max_size: 512 鈫?384 (鍑忓皬 39% 闈㈢Н)
-    - jpeg_quality: 75 鈫?60 (鍑忓皬绾?30% 浣撶Н)
+    优化参数减少 413 错误：
+    - max_size: 512 -> 384 (减小 39% 面积)
+    - jpeg_quality: 75 -> 60 (减小约 30% 体积)
     """
     img = Image.open(image_path)
     if img.mode in ('RGBA', 'LA', 'P'):
@@ -402,7 +402,7 @@ def encode_image_to_base64(image_path, max_size=384, jpeg_quality=60):
 
 
 def get_image_mime_type(image_path):
-    """鑾峰彇鍥剧墖 MIME 绫诲瀷"""
+    """获取图片 MIME 类型"""
     ext = Path(image_path).suffix.lower()
     mime_types = {
         ".png": "image/png",
@@ -1180,6 +1180,12 @@ def get_video_session_dir(session_id):
     return session_dir
 
 
+def get_video_output_dir(session_id):
+    output_dir = Path(OUTPUT_DIR) / 'video' / session_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
 def get_tasks_path(session_id):
     return get_video_session_dir(session_id) / 'video_tasks.json'
 
@@ -1241,7 +1247,9 @@ def upsert_task(session_id, task):
     tasks = load_tasks(session_id)
     updated = False
     for index, item in enumerate(tasks):
-        if item.get('video_id') == task.get('video_id'):
+        same_video = item.get('video_id') and task.get('video_id') and item.get('video_id') == task.get('video_id')
+        same_task = item.get('task_id') and task.get('task_id') and item.get('task_id') == task.get('task_id')
+        if same_video or same_task:
             tasks[index] = {**item, **task, 'updated_at': utc_now_iso()}
             updated = True
             break
@@ -1257,7 +1265,11 @@ def find_task(session_id, task_id=None, video_id=None):
     for task in load_tasks(session_id):
         if task_id and task.get('task_id') == task_id:
             return task
+        if task_id and task.get('video_id') == task_id:
+            return task
         if video_id and task.get('video_id') == video_id:
+            return task
+        if video_id and task.get('task_id') == video_id:
             return task
     return None
 
@@ -1267,15 +1279,54 @@ def sanitize_base_url(base_url):
 
 
 def build_headers(api_key):
-    return {'Authorization': f'Bearer {api_key.strip()}'}
+    token = api_key.strip()
+    return {'Authorization': token if token.lower().startswith('bearer ') else f'Bearer {token}'}
+
+
+def first_present(mapping, keys):
+    for key in keys:
+        value = mapping.get(key)
+        if value:
+            return value
+    return None
+
+
+def extract_video_url(data):
+    if not isinstance(data, dict):
+        return None
+    direct = first_present(data, ['video_url', 'videoUrl', 'url', 'content_url', 'contentUrl', 'download_url', 'downloadUrl'])
+    if direct:
+        return direct
+    output = data.get('output') or data.get('result') or data.get('content')
+    if isinstance(output, dict):
+        return extract_video_url(output)
+    if isinstance(output, list):
+        for item in output:
+            if isinstance(item, dict):
+                url = extract_video_url(item)
+                if url:
+                    return url
+            elif isinstance(item, str) and item.startswith(('http://', 'https://', '/')):
+                return item
+    data_items = data.get('data')
+    if isinstance(data_items, list):
+        for item in data_items:
+            if isinstance(item, dict):
+                url = extract_video_url(item)
+                if url:
+                    return url
+    return None
 
 
 def build_task_record(session_id, payload, response_data):
-    video_id = response_data.get('id')
+    task_id = first_present(response_data, ['task_id', 'taskId', 'task'])
+    video_id = first_present(response_data, ['video_id', 'videoId', 'id'])
+    if not task_id:
+        task_id = video_id
     created_at = utc_now_iso()
     return {
         'session_id': session_id,
-        'task_id': video_id,
+        'task_id': task_id,
         'video_id': video_id,
         'status': response_data.get('status', 'queued'),
         'progress': response_data.get('progress', 0),
@@ -1285,7 +1336,7 @@ def build_task_record(session_id, payload, response_data):
         'size': payload.get('size', ''),
         'seconds': payload.get('seconds'),
         'quality': payload.get('quality', ''),
-        'video_url': response_data.get('video_url'),
+        'video_url': extract_video_url(response_data),
         'error': response_data.get('error'),
     }
 
@@ -1441,9 +1492,27 @@ def serve_gpt_output(session_id, filename):
     return send_from_directory(str(session_dir), filename)
 
 
+@app.route('/output/video/<session_id>/<filename>')
+def serve_video_output(session_id, filename):
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        return jsonify({'error': 'Invalid session ID'}), 400
+
+    if '..' in filename or filename.startswith('/'):
+        return jsonify({'error': 'Invalid filename'}), 400
+
+    output_dir = get_video_output_dir(session_id)
+    file_path = output_dir / filename
+    if not file_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    return send_from_directory(str(output_dir), filename)
+
+
 @app.route('/api/session', methods=['GET', 'POST'])
 def get_session_info():
-    """鑾峰彇褰撳墠 Session 淇℃伅"""
+    """获取当前 Session 信息"""
     session_id = get_session_id()
 
     if request.method == 'POST':
@@ -1465,20 +1534,20 @@ def clear_session():
     """Clear the current session state."""
     session_id = get_session_id()
 
-    # 娓呴櫎鍐呭瓨鐘舵€?
+    # 清除内存状态
     with session_lock:
         if session_id in session_states:
             del session_states[session_id]
 
-    # 娓呴櫎鏂囦欢鐘舵€?
+    # 清除文件状态
     state_path = get_session_state_path(session_id)
     if state_path.exists():
         try:
             state_path.unlink()
         except Exception as e:
-            logging.error(f"鍒犻櫎 Session 鐘舵€佹枃浠跺け璐ワ細{e}")
+            logging.error(f"删除 Session 状态文件失败：{e}")
 
-    # 娓呴櫎鍥剧墖鐩綍
+    # 清除图片目录
     session_dir = get_session_dir(session_id)
     if session_dir.exists():
         try:
@@ -1486,7 +1555,7 @@ def clear_session():
         except Exception as e:
             logging.error(f"Failed to remove session image directory: {e}")
 
-    # 鐢熸垚鏂扮殑 Session ID
+    # 生成新的 Session ID
     new_session_id = str(uuid.uuid4())
     response = make_response(jsonify({
         'success': True,
@@ -1621,7 +1690,7 @@ def delete_gpt_image_result():
 
 @app.route('/api/models', methods=['POST'])
 def get_models():
-    """鑾峰彇妯″瀷鍒楄〃"""
+    """获取模型列表"""
     data = request.json
     api_key = data.get('api_key', '')
     base_url = data.get('base_url', DEFAULT_BASE_URL)
@@ -1649,7 +1718,7 @@ def get_models():
 
 @app.route('/api/test', methods=['POST'])
 def test_connection():
-    """娴嬭瘯杩炴帴"""
+    """测试连接"""
     data = request.json
     api_key = data.get('api_key', '')
     base_url = data.get('base_url', DEFAULT_BASE_URL)
@@ -1715,10 +1784,10 @@ def test_gpt_image_connection():
 
 @app.route('/api/text-to-image', methods=['POST'])
 def text_to_image():
-    """鏂囩敓鍥撅紙鏀寔 Session 闅旂鐨勮繛缁璇濓級"""
+    """文生图（支持 Session 隔离的连续对话）"""
     session_id = get_session_id()
     
-    # 鍔犺浇 Session 鐘舵€?
+    # 加载 Session 状态
     state = load_session_state(session_id)
     last_image = state.get("last_image")
     
@@ -1735,7 +1804,7 @@ def text_to_image():
     image_size = normalize_gemini_image_size(resolution)
     aspect_ratio = normalize_gemini_aspect_ratio(aspect_ratio)
     
-    # 璋冭瘯鏃ュ織
+    # 调试日志
     logging.info("=" * 50)
     logging.info("[DEBUG] Received text-to-image request")
     logging.info(f"[DEBUG] Session ID: {session_id[:8]}...")
@@ -1751,7 +1820,7 @@ def text_to_image():
     if not prompt:
         return jsonify({'error': '请填写提示词'})
     
-    # 纭繚 Session 杈撳嚭鐩綍瀛樺湪
+    # 确保 Session 输出目录存在
     session_dir = get_session_dir(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
     
@@ -1765,10 +1834,10 @@ def text_to_image():
         for i in range(image_count):
             logging.info(f"[DEBUG] Starting generation loop {i+1}")
             
-            # 鏋勫缓 payload 鍚庢墦鍗拌皟璇?
+            # 构建 payload 后打印调试日志
             logging.info("[DEBUG] Preparing payload")
             
-            # 濡傛灉浣跨敤涓婁竴寮犲浘锛堣繛缁璇濓級
+            # 如果使用上一张图（连续对话）
             if use_last_image and last_image and Path(last_image).exists():
                 logging.info(f"[DEBUG] Using previous image: {last_image}")
                 base64_image = encode_image_to_base64(last_image, max_size=512, jpeg_quality=75)
@@ -1784,7 +1853,7 @@ def text_to_image():
                 )
             else:
                 logging.info("[DEBUG] Using text-only generation mode")
-                # 绾枃鐢熷浘妯″紡
+                # 纯文生图模式
                 payload = build_gemini_payload(
                     [{"text": prompt}],
                     image_size=image_size,
@@ -1794,26 +1863,26 @@ def text_to_image():
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
             
-            # 鎵撳嵃 payload 鐢ㄤ簬璋冭瘯
+            # 打印 payload 用于调试
             import json
             logging.info(f"[DEBUG] Payload: {json.dumps(payload, ensure_ascii=False)[:800]}")
             
-            # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
+            # 直接调用 API（不重试）
             try:
                 logging.info(f"[DEBUG] Sending request to {url}")
                 response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
                 used_timeout_fallback = used_timeout_fallback or response_used_fallback
                 logging.info(f"[DEBUG] Response status: {response.status_code}")
-                logging.info(f"[DEBUG] 鍝嶅簲澶达細{dict(response.headers)}")
+                logging.info(f"[DEBUG] 响应头：{dict(response.headers)}")
                 if response.status_code >= 400:
-                    logging.error(f"[DEBUG] 鍝嶅簲浣擄細{response.text[:500]}")
+                    logging.error(f"[DEBUG] 响应体：{response.text[:500]}")
             except requests.exceptions.Timeout:
                 logging.error(f"[TIMEOUT] Request timed out after {API_TIMEOUT} seconds")
-                return jsonify({'success': False, 'message': '鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撹秴鏃讹紝璇锋鏌ヤ笂娓告槸鍚﹀凡鐢熸垚鍥剧墖'})
+                return jsonify({'success': False, 'message': '上游可能已成功，但传输超时，请检查上游是否已生成图片'})
             except requests.exceptions.RequestException as e:
                 logging.error(f"[ERROR] Request failed: {e}")
                 logging.error(f"[ERROR] Exception type: {type(e).__name__}")
-                return jsonify({'success': False, 'message': f'鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撳け璐ワ細{str(e)}'})
+                return jsonify({'success': False, 'message': f'上游可能已成功，但传输失败：{str(e)}'})
             
             if response.status_code >= 400:
                 return forward_gemini_error_response(response)
@@ -1842,7 +1911,7 @@ def text_to_image():
                             image.save(output_path)
                             output_paths.append(output_path.name)
                             
-                            # 鏇存柊 Session 鐨勬渶鍚庝竴寮犲浘锛堝彧璁板綍绗竴寮狅級
+                            # 更新 Session 的最后一张图（只记录第一张）
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
                                 logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
@@ -1851,7 +1920,7 @@ def text_to_image():
                     if "text" in part:
                         text = part["text"]
                         
-                        # 鏂瑰紡 1: Markdown base64 鏍煎紡 ![image](data:image/png;base64,...)
+                        # 方式 1: Markdown base64 格式 ![image](data:image/png;base64,...)
                         md_pattern = r'!\[.*?\]\(data:(image/[a-z]+);base64,([A-Za-z0-9+/=]+)\)'
                         match = re.search(md_pattern, text)
                         if match:
@@ -1869,14 +1938,14 @@ def text_to_image():
                                 logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
                         
-                        # 鏂瑰紡 2: Markdown 澶栭儴 URL 鏍煎紡 ![Image](https://...)
+                        # 方式 2: Markdown 外部 URL 格式 ![Image](https://...)
                         url_pattern = r'!\[.*?\]\((https?://[^\s\)]+\.(png|jpg|jpeg|webp|gif))\)'
                         url_match = re.search(url_pattern, text, re.IGNORECASE)
                         if url_match:
                             image_url = url_match.group(1)
-                            logging.info(f"[DEBUG] 馃柤锔?鍙戠幇澶栭儴鍥剧墖 URL: {image_url}")
+                            logging.info(f"[DEBUG] 发现外部图片 URL: {image_url}")
                             
-                            # 涓嬭浇鍥剧墖
+                            # 下载图片
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
@@ -1925,13 +1994,13 @@ def image_to_image():
     image_count = int(data.get('image_count', 1))
     resolution = data.get('resolution', '')
     aspect_ratio = data.get('aspect_ratio', '')
-    image_data_list = data.get('image_data_list', [])  # base64 鍒楄〃锛屾敮鎸佸寮?
+    image_data_list = data.get('image_data_list', [])  # base64 列表，支持多张
 
     image_size = normalize_gemini_image_size(resolution)
     aspect_ratio = normalize_gemini_aspect_ratio(aspect_ratio)
 
-    # 璋冭瘯鏃ュ織
-    logging.info(f"[DEBUG] 鍥剧敓鍥撅細image_size={image_size}, aspect_ratio={aspect_ratio}, 鍙傝€冨浘鏁伴噺={len(image_data_list)}")
+    # 调试日志
+    logging.info(f"[DEBUG] 图生图：image_size={image_size}, aspect_ratio={aspect_ratio}, 参考图数量={len(image_data_list)}")
 
     if not api_key:
         return jsonify({'error': '请填写 API Key'})
@@ -1944,20 +2013,20 @@ def image_to_image():
     if len(image_data_list) > 4:
         return jsonify({'error': 'At most 4 reference images are supported'})
 
-    # 妫€鏌ュ浘鐗囨€诲ぇ灏?
+    # 检查图片总大小
     total_size = sum(len(img.split(',')[1]) if ',' in img else len(img) for img in image_data_list)
-    total_size_mb = total_size * 3 / 4 / 1024 / 1024  # base64 杞洖鍘熷澶у皬浼扮畻
-    logging.info(f"[DEBUG] 鍙傝€冨浘鎬诲ぇ灏忎及绠楋細{total_size_mb:.2f}MB")
+    total_size_mb = total_size * 3 / 4 / 1024 / 1024  # base64 转回原始大小估算
+    logging.info(f"[DEBUG] 参考图总大小估算：{total_size_mb:.2f}MB")
     if total_size_mb > 5:
         return jsonify({'error': f'Reference images are too large ({total_size_mb:.2f}MB total)'})
 
-    # 纭繚 Session 杈撳嚭鐩綍瀛樺湪
+    # 确保 Session 输出目录存在
     session_dir = get_session_dir(session_id)
     session_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
-        # 瑙ｆ瀽涓婁紶鐨勬墍鏈夊浘鐗囷紝缂栫爜涓?base64
+        # 解析上传的所有图片，编码为 base64
         encoded_images = []
         for img_data in image_data_list:
             if ',' in img_data:
@@ -1972,7 +2041,7 @@ def image_to_image():
         used_timeout_fallback = False
 
         for i in range(image_count):
-            # 鏋勫缓 parts 鍒楄〃锛氭墍鏈夊弬鑰冨浘 + 鎻愮ず璇?
+            # 构建 parts 列表：所有参考图 + 提示词
             parts = []
             for encoded_img in encoded_images:
                 parts.append({"inlineData": {"mimeType": "image/jpeg", "data": encoded_img}})
@@ -1987,21 +2056,21 @@ def image_to_image():
             if negative_prompt:
                 payload["systemInstruction"] = {"parts": [{"text": f"不要生成包含以下内容的内容：{negative_prompt}"}]}
 
-            # 鐩存帴璋冪敤 API锛堜笉閲嶈瘯锛?
+            # 直接调用 API（不重试）
             try:
                 response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
                 used_timeout_fallback = used_timeout_fallback or response_used_fallback
             except requests.exceptions.Timeout:
-                logging.error(f"[TIMEOUT] 璇锋眰瓒呮椂")
-                return jsonify({'success': False, 'message': '鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撹秴鏃讹紝璇锋鏌ヤ笂娓告槸鍚﹀凡鐢熸垚鍥剧墖'})
+                logging.error(f"[TIMEOUT] 请求超时")
+                return jsonify({'success': False, 'message': '上游可能已成功，但传输超时，请检查上游是否已生成图片'})
             except requests.exceptions.RequestException as e:
                 logging.error(f"[ERROR] Request failed: {e}")
-                return jsonify({'success': False, 'message': f'鈿狅笍 涓婃父鍙兘宸叉垚鍔燂紝浣嗕紶杈撳け璐ワ細{str(e)}'})
+                return jsonify({'success': False, 'message': f'上游可能已成功，但传输失败：{str(e)}'})
 
-            # 鎵撳嵃鍝嶅簲鏃ュ織
+            # 打印响应日志
             logging.info(f"[DEBUG] Response status: {response.status_code}")
             if response.status_code >= 400:
-                logging.error(f"[DEBUG] 鍝嶅簲浣擄細{response.text[:500]}")
+                logging.error(f"[DEBUG] 响应体：{response.text[:500]}")
 
             if response.status_code >= 400:
                 return forward_gemini_error_response(response)
@@ -2028,7 +2097,7 @@ def image_to_image():
                             image.save(output_path)
                             output_paths.append(output_path.name)
 
-                            # 鏇存柊 Session 鐨勬渶鍚庝竴寮犲浘
+                            # 更新 Session 的最后一张图
                             if i == 0:
                                 update_session_last_image(session_id, str(output_path))
                                 logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
@@ -2037,7 +2106,7 @@ def image_to_image():
                     if "text" in part:
                         text = part["text"]
 
-                        # 鏂瑰紡 1: Markdown base64 鏍煎紡
+                        # 方式 1: Markdown base64 格式
                         md_pattern = r'!\[.*?\]\(data:(image/[a-z]+);base64,([A-Za-z0-9+/=]+)\)'
                         match = re.search(md_pattern, text)
                         if match:
@@ -2055,14 +2124,14 @@ def image_to_image():
                                 logging.info(f"[DEBUG] Updated last_image: {output_path} size={image.size}")
                             break
 
-                        # 鏂瑰紡 2: Markdown 澶栭儴 URL 鏍煎紡
+                        # 方式 2: Markdown 外部 URL 格式
                         url_pattern = r'!\[.*?\]\((https?://[^\s\)]+\.(png|jpg|jpeg|webp|gif))\)'
                         url_match = re.search(url_pattern, text, re.IGNORECASE)
                         if url_match:
                             image_url = url_match.group(1)
-                            logging.info(f"[DEBUG] 馃柤锔?鍙戠幇澶栭儴鍥剧墖 URL: {image_url}")
+                            logging.info(f"[DEBUG] 发现外部图片 URL: {image_url}")
 
-                            # 涓嬭浇鍥剧墖
+                            # 下载图片
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
@@ -2431,7 +2500,7 @@ def query_video():
 
     local_task = find_task(session_id, task_id=task_id, video_id=video_id)
     if local_task and not video_id:
-        lookup_id = local_task.get('video_id') or lookup_id
+        lookup_id = local_task.get('task_id') or local_task.get('video_id') or lookup_id
 
     try:
         response = requests.get(
@@ -2446,11 +2515,13 @@ def query_video():
         return forward_error_response(response)
 
     remote = response.json()
+    remote_task_id = first_present(remote, ['task_id', 'taskId', 'task'])
+    remote_video_id = first_present(remote, ['video_id', 'videoId', 'id'])
     merged = {
         **(local_task or {}),
         'session_id': session_id,
-        'task_id': (local_task or {}).get('task_id') or remote.get('id'),
-        'video_id': remote.get('id') or lookup_id,
+        'task_id': (local_task or {}).get('task_id') or remote_task_id or lookup_id,
+        'video_id': remote_video_id or (local_task or {}).get('video_id') or lookup_id,
         'status': remote.get('status', (local_task or {}).get('status', 'queued')),
         'progress': remote.get('progress', (local_task or {}).get('progress', 0)),
         'prompt': remote.get('prompt', (local_task or {}).get('prompt', '')),
@@ -2458,7 +2529,7 @@ def query_video():
         'size': remote.get('size', (local_task or {}).get('size', '')),
         'seconds': remote.get('seconds', (local_task or {}).get('seconds')),
         'quality': remote.get('quality', (local_task or {}).get('quality', '')),
-        'video_url': remote.get('video_url', (local_task or {}).get('video_url')),
+        'video_url': extract_video_url(remote) or (local_task or {}).get('video_url'),
         'error': remote.get('error', (local_task or {}).get('error')),
         'created_at': (local_task or {}).get('created_at', utc_now_iso()),
     }
@@ -2554,21 +2625,21 @@ def cleanup_sessions():
             if last_accessed < cutoff:
                 session_id = state_file.stem
                 
-                # 鍒犻櫎鐘舵€佹枃浠?
+                # 删除状态文件
                 state_file.unlink()
                 
-                # 鍒犻櫎鍥剧墖鐩綍
+                # 删除图片目录
                 session_dir = get_session_dir(session_id)
                 if session_dir.exists():
                     shutil.rmtree(session_dir)
                 
-                # 娓呴櫎鍐呭瓨
+                # 清除内存
                 with session_lock:
                     if session_id in session_states:
                         del session_states[session_id]
                 
                 cleaned += 1
-                logging.info(f"[CLEANUP] 娓呯悊杩囨湡 Session: {session_id[:8]}...")
+                logging.info(f"[CLEANUP] 清理过期 Session: {session_id[:8]}...")
         except Exception as e:
             logging.error(f"[CLEANUP] Failed to clean session: {e}")
     
