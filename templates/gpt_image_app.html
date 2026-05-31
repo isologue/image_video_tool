@@ -369,6 +369,56 @@
         .status-error { background: rgba(255, 142, 179, 0.12); border-color: rgba(255, 142, 179, 0.2); }
         .status-loading { background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.2); }
 
+        .loading-spinner {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            border: 3px solid rgba(167, 139, 250, 0.18);
+            border-top-color: rgba(167, 139, 250, 0.9);
+            animation: spin 0.9s linear infinite;
+            margin-bottom: 12px;
+        }
+
+        .task-state-card {
+            border-color: rgba(167, 139, 250, 0.28);
+        }
+
+        .task-state-body {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .task-state-body strong {
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .task-state-body p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        .task-state-card .image-actions {
+            min-height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         .upload-box {
             border: 1px dashed rgba(167, 139, 250, 0.3);
             border-radius: 18px;
@@ -850,6 +900,8 @@
             interfaceMode: 'native',
             saveTimer: null,
             applyingDraft: false,
+            activeTaskTimer: null,
+            taskErrors: {},
         };
         const generateTabButton = document.querySelector('.tab[data-tab="generatePanel"]');
         const editTabButton = document.querySelector('.tab[data-tab="editPanel"]');
@@ -1294,7 +1346,11 @@
             }
             container.className = 'gallery';
             const timestamp = Date.now();
-            container.innerHTML = images.map((src, index) => `
+            container.innerHTML = renderImageCards(images, timestamp);
+        }
+
+        function renderImageCards(images = [], timestamp = Date.now()) {
+            return images.map((src, index) => `
                 <div class="image-card">
                     <img src="${src}?t=${timestamp}" alt="result-${index + 1}" onclick="openLightbox('${src}')">
                     <div class="image-actions">
@@ -1303,6 +1359,93 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        function getCurrentResultImages() {
+            return collectHistoryImages(state.history, state.lastImageUrl);
+        }
+
+        function renderResultLoading(taskId, label = '图片生成中') {
+            const container = document.getElementById('resultContainer');
+            container.className = 'gallery';
+            const images = getCurrentResultImages();
+            container.innerHTML = `
+                <div class="image-card task-state-card">
+                    <div class="task-state-body">
+                        <div class="loading-spinner"></div>
+                        <strong>${label}</strong>
+                        <p>任务 ID：${taskId || '-'}</p>
+                        <p>完成后自动显示新图</p>
+                    </div>
+                    <div class="image-actions">生成中</div>
+                </div>
+                ${renderImageCards(images)}
+            `.trim();
+        }
+
+        function renderResultFailure(taskId, message, detail) {
+            const container = document.getElementById('resultContainer');
+            if (taskId) state.taskErrors[taskId] = detail || { message };
+            container.className = 'gallery';
+            const images = getCurrentResultImages();
+            container.innerHTML = `
+                <div class="image-card task-state-card">
+                    <div class="task-state-body">
+                        <strong>生成失败</strong>
+                        <p>${message || '任务失败，未返回更多说明。'}</p>
+                    </div>
+                    <div class="image-actions">
+                        <button type="button" class="btn-secondary btn-danger-soft" onclick="showGptTaskError('${taskId || ''}')">查看具体失败内容</button>
+                    </div>
+                </div>
+                ${renderImageCards(images)}
+            `.trim();
+        }
+
+        function showGptTaskError(taskId) {
+            const detail = state.taskErrors[taskId] || {};
+            alert(typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2));
+        }
+
+        function stopGptTaskPolling() {
+            if (state.activeTaskTimer) {
+                clearTimeout(state.activeTaskTimer);
+                state.activeTaskTimer = null;
+            }
+        }
+
+        async function pollGptImageTask(taskId, statusId, successFallback) {
+            try {
+                const response = await fetch(`/api/gpt-image/tasks/${encodeURIComponent(taskId)}`);
+                const task = await response.json();
+                if (!response.ok || !task.success) {
+                    throw new Error(task.message || '查询任务失败');
+                }
+
+                if (task.status === 'succeeded') {
+                    stopGptTaskPolling();
+                    const result = task.result || {};
+                    renderResultImages(result.images || []);
+                    showStatus(statusId, result.message || successFallback || '生成成功', 'success');
+                    await refreshGptSession();
+                    return;
+                }
+
+                if (task.status === 'failed') {
+                    stopGptTaskPolling();
+                    const detail = task.error || { message: task.message };
+                    renderResultFailure(taskId, task.message || '生成失败', detail);
+                    showStatus(statusId, formatApiError(detail, '生成失败'), 'error');
+                    return;
+                }
+
+                showStatus(statusId, task.message || '后台正在生成图片...', 'loading');
+                state.activeTaskTimer = setTimeout(() => pollGptImageTask(taskId, statusId, successFallback), 1500);
+            } catch (error) {
+                stopGptTaskPolling();
+                renderResultFailure(taskId, error.message, { message: error.message });
+                showStatus(statusId, `查询任务失败：${error.message}`, 'error');
+            }
         }
 
         function collectHistoryImages(history = [], fallbackImageUrl = '') {
@@ -1458,9 +1601,11 @@
                     showStatus('configStatus', result.message || '清空失败', 'error');
                     return;
                 }
+                stopGptTaskPolling();
                 clearEditImage(false);
                 state.lastImageUrl = '';
                 state.history = [];
+                state.taskErrors = {};
                 renderResultImages([]);
                 showStatus('configStatus', result.message || '已清空当前 GPT 会话', 'success');
                 await refreshGptSession();
@@ -1488,19 +1633,20 @@
                 showStatus(statusId, '正在提交文生图请求...', 'loading');
                 try {
                     await saveGptDraft();
-                    const response = await fetch('/api/gpt-image/generate', {
+                    const response = await fetch('/api/gpt-image/tasks', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
+                        body: JSON.stringify({ mode: 'generate', payload }),
                     });
                     const result = await response.json();
                     if (!response.ok || !result.success) {
                         showStatus(statusId, formatApiError(result, '生成失败'), 'error');
                         return;
                     }
-                    renderResultImages(result.images || []);
-                    showStatus(statusId, result.message || '生成成功', 'success');
-                    await refreshGptSession();
+                    renderResultLoading(result.task_id, '文生图生成中');
+                    showStatus(statusId, result.message || '任务已提交，后台正在生成。', 'loading');
+                    stopGptTaskPolling();
+                    state.activeTaskTimer = setTimeout(() => pollGptImageTask(result.task_id, statusId, '生成成功'), 600);
                 } catch (error) {
                     showStatus(statusId, `生成失败：${error.message}`, 'error');
                 } finally {
@@ -1520,6 +1666,7 @@
             formData.append('aspect_ratio', workflow.aspect_ratio);
             formData.append('size', resolveSize(workflow.size, workflow.aspect_ratio));
             formData.append('image_count', String(workflow.image_count));
+            formData.append('mode', 'edit');
             if (state.useLastImage) {
                 formData.append('use_last_image', 'true');
             } else if (state.editFiles.length) {
@@ -1528,7 +1675,7 @@
             showStatus(statusId, '正在提交图生图请求...', 'loading');
             try {
                 await saveGptDraft();
-                const response = await fetch('/api/gpt-image/edit', {
+                const response = await fetch('/api/gpt-image/tasks', {
                     method: 'POST',
                     body: formData,
                 });
@@ -1537,9 +1684,10 @@
                     showStatus(statusId, formatApiError(result, '编辑失败'), 'error');
                     return;
                 }
-                renderResultImages(result.images || []);
-                showStatus(statusId, result.message || '编辑成功', 'success');
-                await refreshGptSession();
+                renderResultLoading(result.task_id, '图生图生成中');
+                showStatus(statusId, result.message || '任务已提交，后台正在生成。', 'loading');
+                stopGptTaskPolling();
+                state.activeTaskTimer = setTimeout(() => pollGptImageTask(result.task_id, statusId, '编辑成功'), 600);
             } catch (error) {
                 showStatus(statusId, `编辑失败：${error.message}`, 'error');
             } finally {

@@ -75,6 +75,8 @@ session_lock = threading.Lock()
 file_lock = threading.Lock()
 gemini_tasks = {}
 gemini_task_lock = threading.Lock()
+gpt_image_tasks = {}
+gpt_image_task_lock = threading.Lock()
 
 
 def get_session_id():
@@ -201,6 +203,101 @@ def get_gemini_task(task_id):
     with gemini_task_lock:
         task = gemini_tasks.get(task_id)
         return dict(task) if task else None
+
+
+def create_gpt_image_task(session_id, mode, payload):
+    task_id = str(uuid.uuid4())
+    now = utc_now_iso()
+    task = {
+        'task_id': task_id,
+        'session_id': session_id,
+        'mode': mode,
+        'status': 'queued',
+        'success': False,
+        'message': 'Task queued',
+        'created_at': now,
+        'updated_at': now,
+        'result': None,
+        'error': None,
+    }
+    with gpt_image_task_lock:
+        gpt_image_tasks[task_id] = task
+
+    worker = threading.Thread(
+        target=run_gpt_image_task,
+        args=(task_id, session_id, mode, copy.deepcopy(payload)),
+        daemon=True,
+    )
+    worker.start()
+    return task
+
+
+def update_gpt_image_task(task_id, **updates):
+    updates['updated_at'] = utc_now_iso()
+    with gpt_image_task_lock:
+        task = gpt_image_tasks.get(task_id)
+        if not task:
+            return None
+        task.update(updates)
+        return dict(task)
+
+
+def get_gpt_image_task(task_id):
+    with gpt_image_task_lock:
+        task = gpt_image_tasks.get(task_id)
+        return dict(task) if task else None
+
+
+def run_gpt_image_task(task_id, session_id, mode, payload):
+    update_gpt_image_task(task_id, status='running', message='Task running')
+    try:
+        cookie_header = f'{GPT_IMAGE_SESSION_COOKIE_NAME}={session_id}'
+        if mode == 'generate':
+            with app.test_request_context(
+                '/api/gpt-image/generate',
+                method='POST',
+                json=payload.get('data') or {},
+                headers={'Cookie': cookie_header},
+                base_url=payload.get('origin') or None,
+            ):
+                status_code, data = normalize_flask_result(gpt_image_generate())
+        else:
+            form_data = dict(payload.get('data') or {})
+            file_items = []
+            for item in payload.get('files') or []:
+                file_items.append((BytesIO(item['content']), item.get('filename') or 'reference.jpg'))
+            if file_items:
+                form_data['image[]'] = file_items
+            with app.test_request_context(
+                '/api/gpt-image/edit',
+                method='POST',
+                data=form_data,
+                content_type='multipart/form-data',
+                headers={'Cookie': cookie_header},
+                base_url=payload.get('origin') or None,
+            ):
+                status_code, data = normalize_flask_result(gpt_image_edit())
+
+        success = bool(data.get('success')) and status_code < 400
+        update_gpt_image_task(
+            task_id,
+            status='succeeded' if success else 'failed',
+            success=success,
+            message=data.get('message') or data.get('error') or ('Task completed' if success else 'Task failed'),
+            result=data if success else None,
+            error=None if success else data,
+            finished_at=utc_now_iso(),
+        )
+    except Exception as exc:
+        logging.exception('GPT image async task failed: %s', task_id)
+        update_gpt_image_task(
+            task_id,
+            status='failed',
+            success=False,
+            message=f'Error: {exc}',
+            error={'success': False, 'message': str(exc)},
+            finished_at=utc_now_iso(),
+        )
 
 
 def normalize_flask_result(result):
@@ -1603,7 +1700,7 @@ def create_gemini_image_task():
     response = jsonify({
         'success': True,
         'task_id': task['task_id'],
-        'status': task['status'],
+        'status': 'queued',
         'message': '任务已提交，后台正在生成。',
     })
     return set_session_cookie(response, session_id)
@@ -1686,6 +1783,58 @@ def delete_gpt_image_result():
 
     response = jsonify({'success': True, 'message': '图片已删除', 'session': build_gpt_session_payload(session_id)})
     return set_gpt_session_cookie(response, session_id)
+
+
+@app.route('/api/gpt-image/tasks', methods=['POST'])
+def create_gpt_image_task_endpoint():
+    session_id = get_gpt_session_id()
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        mode = (request.form.get('mode') or 'edit').strip().lower()
+        payload = {'data': request.form.to_dict(), 'files': [], 'origin': request.host_url}
+        for uploaded_file in get_uploaded_image_files(request.files):
+            payload['files'].append({
+                'filename': uploaded_file.filename or 'reference.jpg',
+                'content': uploaded_file.read(),
+            })
+    else:
+        body = request.get_json(silent=True) or {}
+        mode = (body.get('mode') or 'generate').strip().lower()
+        payload_data = body.get('payload') if isinstance(body.get('payload'), dict) else body
+        payload = {'data': payload_data or {}, 'files': [], 'origin': request.host_url}
+
+    if mode not in {'generate', 'edit'}:
+        return jsonify({'success': False, 'message': 'Invalid GPT image task mode'}), 400
+    data = payload.get('data') or {}
+    if not data.get('api_key'):
+        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+    if not data.get('prompt'):
+        return jsonify({'success': False, 'message': '请填写提示词'}), 400
+    if mode == 'edit':
+        use_last = str(data.get('use_last_image') or '').lower() == 'true'
+        if not use_last and not payload.get('files'):
+            return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
+
+    task = create_gpt_image_task(session_id, mode, payload)
+    response = jsonify({
+        'success': True,
+        'task_id': task['task_id'],
+        'status': 'queued',
+        'message': '任务已提交，后台正在生成。',
+    })
+    return set_gpt_session_cookie(response, session_id)
+
+
+@app.route('/api/gpt-image/tasks/<task_id>', methods=['GET'])
+def get_gpt_image_task_endpoint(task_id):
+    task = get_gpt_image_task(task_id)
+    if not task:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+    session_id = get_gpt_session_id()
+    if task.get('session_id') != session_id:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+    task_payload = dict(task)
+    task_payload['task_success'] = bool(task_payload.pop('success', False))
+    return jsonify({'success': True, **task_payload})
 
 
 @app.route('/api/models', methods=['POST'])
