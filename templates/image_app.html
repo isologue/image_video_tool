@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPT 生图</title>
+    <title>{{ workspace_title|default('统一图片工作区') }}</title>
     <style>
         :root {
-            --bg: #0b0f20;
-            --bg-soft: #151733;
-            --panel: rgba(14, 16, 38, 0.92);
-            --panel-strong: rgba(18, 20, 46, 0.96);
-            --text: #f0ebff;
-            --muted: #a8a0c6;
-            --line: rgba(158, 138, 225, 0.22);
-            --accent: #c8abff;
-            --accent-2: #91a6ff;
-            --danger: #ff8eb3;
-            --warn: #ffd36b;
-            --shadow: 0 24px 60px rgba(7, 8, 24, 0.42);
-            --radius: 22px;
+            --bg: #f4f4ef;
+            --bg-soft: #ebebe5;
+            --panel: rgba(255, 255, 255, 0.96);
+            --panel-strong: rgba(255, 255, 255, 0.98);
+            --text: #111111;
+            --muted: #6b6b66;
+            --line: rgba(17, 17, 17, 0.12);
+            --accent: #111111;
+            --accent-2: #111111;
+            --danger: #111111;
+            --warn: #6b6b66;
+            --shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+            --radius: 18px;
         }
 
         * { box-sizing: border-box; }
@@ -29,48 +29,77 @@
             font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
             color: var(--text);
             background:
-                radial-gradient(circle at top left, rgba(192, 132, 252, 0.18), transparent 28%),
-                radial-gradient(circle at right 20%, rgba(96, 165, 250, 0.12), transparent 24%),
-                linear-gradient(135deg, #070a16, #101428 45%, #171f35);
-            padding: 28px;
+                radial-gradient(circle at top left, rgba(0, 0, 0, 0.04), transparent 28%),
+                radial-gradient(circle at right 20%, rgba(0, 0, 0, 0.03), transparent 24%),
+                linear-gradient(180deg, #fafaf7, #f0f0eb);
+            padding: 18px;
         }
 
         .shell {
-            max-width: 1320px;
+            max-width: 1240px;
             margin: 0 auto;
         }
 
         .hero {
-            background: linear-gradient(145deg, rgba(20, 13, 36, 0.96), rgba(22, 29, 51, 0.98));
-            border: 1px solid rgba(167, 139, 250, 0.2);
-            border-radius: 28px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 248, 244, 0.98));
+            border: 1px solid var(--line);
+            border-radius: 22px;
             box-shadow: var(--shadow);
-            padding: 28px 30px;
-            margin-bottom: 22px;
+            padding: 22px 24px;
+            margin-bottom: 18px;
         }
 
         .hero-top {
             display: block;
         }
 
-        .hero-title-row {
+        .hero-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .hero-meta-chips {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 8px;
             flex-wrap: wrap;
+            min-width: 0;
+        }
+
+        .hero-meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 0 12px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .hero-meta-chip.is-brand {
+            color: var(--text);
+            font-weight: 700;
         }
 
         .hero h1 {
             margin: 0;
-            font-size: clamp(30px, 4vw, 44px);
-            line-height: 1.05;
+            font-size: clamp(24px, 3vw, 34px);
+            line-height: 1.08;
         }
 
         .hero p {
             margin: 0;
             color: var(--muted);
-            line-height: 1.7;
-            font-size: 15px;
+            line-height: 1.6;
+            font-size: 14px;
             max-width: 760px;
         }
 
@@ -91,10 +120,10 @@
         } */
 
         .session-card {
-            background: linear-gradient(160deg, rgba(18, 15, 34, 0.94), rgba(24, 29, 52, 0.9));
-            border: 1px solid rgba(167, 139, 250, 0.18);
-            border-radius: 24px;
-            padding: 22px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 247, 243, 0.98));
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 18px;
             min-height: 100%;
             display: flex;
             flex-direction: column;
@@ -102,15 +131,15 @@
         }
 
         .session-label {
-            font-size: 12px;
+            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: #c8b5ff;
+            color: var(--muted);
         }
 
         .session-id {
-            margin: 12px 0 10px;
-            font-size: 16px;
+            margin: 10px 0 8px;
+            font-size: 14px;
             font-weight: 700;
             line-height: 1.3;
             word-break: break-all;
@@ -118,8 +147,8 @@
 
         .session-meta {
             color: var(--muted);
-            font-size: 13px;
-            line-height: 1.7;
+            font-size: 12px;
+            line-height: 1.6;
         }
 
         .hero-actions {
@@ -131,28 +160,28 @@
         .hero-steps {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-            margin-top: 22px;
+            gap: 12px;
+            margin-top: 18px;
         }
 
         .step-card {
-            background: rgba(8, 16, 30, 0.58);
-            border: 1px solid rgba(102, 184, 255, 0.14);
-            border-radius: 20px;
-            padding: 18px;
+            background: rgba(250, 250, 247, 0.95);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
         }
 
         .step-card strong {
             display: block;
-            margin-bottom: 10px;
-            font-size: 14px;
+            margin-bottom: 8px;
+            font-size: 13px;
         }
 
         .step-card p {
             margin: 0;
             color: var(--muted);
-            font-size: 14px;
-            line-height: 1.7;
+            font-size: 13px;
+            line-height: 1.6;
         }
 
         .step-meta {
@@ -176,8 +205,9 @@
 
         .layout {
             display: grid;
-            grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-            gap: 22px;
+            grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+            gap: 18px;
+            align-items: stretch;
         }
 
         .panel {
@@ -189,32 +219,33 @@
         }
 
         .panel-body {
-            padding: 22px;
+            padding: 18px;
         }
 
         .tabs {
             display: flex;
-            gap: 10px;
-            padding: 22px 22px 0;
+            gap: 8px;
+            padding: 18px 18px 0;
             flex-wrap: wrap;
         }
 
         .tab {
-            border: 1px solid rgba(158, 138, 225, 0.22);
-            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--line);
+            background: #f7f7f3;
             color: var(--muted);
-            padding: 10px 16px;
+            padding: 8px 14px;
             border-radius: 999px;
             cursor: pointer;
             transition: 0.2s ease;
+            font-size: 13px;
         }
 
         .tab.active {
-            color: #140f23;
-            background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            border-color: transparent;
+            color: #ffffff;
+            background: #111111;
+            border-color: #111111;
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(139, 92, 246, 0.24);
+            box-shadow: none;
         }
 
         .tab-panel { display: none; }
@@ -222,12 +253,252 @@
 
         .group { margin-bottom: 16px; }
 
+        .workflow-dimension-stack {
+            display: grid;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .size-preset-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .size-preset-button {
+            appearance: none;
+            border: 1px solid var(--line);
+            background: #ffffff;
+            color: var(--muted);
+            border-radius: 999px;
+            min-width: 56px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+        }
+
+        .size-preset-button.active {
+            background: #111111;
+            border-color: #111111;
+            color: #ffffff;
+        }
+
+        .toggle-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 42px;
+            padding: 0 2px;
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        .toggle-check input {
+            width: 16px;
+            height: 16px;
+            accent-color: #111111;
+        }
+
+        .option-chip-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .option-chip {
+            appearance: none;
+            border: 1px solid var(--line);
+            background: #ffffff;
+            color: var(--muted);
+            border-radius: 999px;
+            min-width: 56px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+        }
+
+        .option-chip.active {
+            background: #111111;
+            border-color: #111111;
+            color: #ffffff;
+        }
+
+        .option-chip.disabled,
+        .size-preset-button.disabled {
+            opacity: 0.42;
+            cursor: not-allowed;
+            background: #f3f3ee;
+            color: #9a9a93;
+            border-color: rgba(17, 17, 17, 0.08);
+        }
+
+        .key-profile-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .key-profile-card {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #fafaf7;
+            padding: 12px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .key-profile-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .key-profile-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .key-profile-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .model-binding-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .size-display-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+        }
+
+        .size-display-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 42px;
+            padding: 0 12px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: #f7f7f3;
+            box-shadow: none;
+        }
+
+        .size-display-prefix {
+            color: var(--muted);
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .size-display-value {
+            color: var(--text);
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .size-display-separator {
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .ratio-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+            gap: 8px;
+        }
+
+        .ratio-card {
+            appearance: none;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            min-height: 64px;
+            padding: 8px 6px;
+            background: #ffffff;
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .ratio-card:hover {
+            transform: translateY(-1px);
+            border-color: rgba(17, 17, 17, 0.3);
+            background: #f5f5f1;
+        }
+
+        .ratio-card.active {
+            border-color: #111111;
+            background: #111111;
+            color: #ffffff;
+            box-shadow: none;
+        }
+
+        .ratio-card:focus-visible {
+            outline: none;
+            border-color: #111111;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .ratio-card-icon {
+            display: block;
+            border: 2px solid currentColor;
+            border-radius: 4px;
+            opacity: 0.92;
+        }
+
+        .ratio-card[data-ratio="1:1"] .ratio-card-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .ratio-card[data-ratio="2:3"] .ratio-card-icon,
+        .ratio-card[data-ratio="3:4"] .ratio-card-icon,
+        .ratio-card[data-ratio="9:16"] .ratio-card-icon {
+            width: 12px;
+            height: 22px;
+        }
+
+        .ratio-card[data-ratio="3:2"] .ratio-card-icon,
+        .ratio-card[data-ratio="4:3"] .ratio-card-icon,
+        .ratio-card[data-ratio="16:9"] .ratio-card-icon {
+            width: 22px;
+            height: 12px;
+        }
+
+        .ratio-card-label {
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
         label {
             display: block;
             margin-bottom: 7px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
-            color: #e7dcff;
+            color: var(--text);
         }
 
         input,
@@ -241,65 +512,66 @@
         select,
         textarea {
             width: 100%;
-            border-radius: 14px;
-            border: 1px solid rgba(158, 138, 225, 0.22);
-            background: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: #ffffff;
             color: var(--text);
-            padding: 12px 14px;
+            padding: 11px 13px;
             outline: none;
         }
 
         select {
-            color-scheme: dark;
-            background-color: #141730;
+            color-scheme: light;
+            background-color: #ffffff;
         }
 
         select option {
-            background: #141730;
+            background: #ffffff;
             color: var(--text);
         }
 
         textarea {
             resize: vertical;
-            min-height: 110px;
+            min-height: 96px;
             line-height: 1.6;
         }
 
         input:focus,
         select:focus,
         textarea:focus {
-            border-color: rgba(167, 139, 250, 0.46);
-            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.14);
+            border-color: rgba(17, 17, 17, 0.36);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
         }
 
         .grid-2 {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
+            gap: 12px;
         }
 
         .stack-actions,
         .actions,
         .side-header {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
             align-items: center;
         }
 
         .side-header {
             justify-content: space-between;
-            margin-bottom: 18px;
+            margin-bottom: 14px;
         }
 
         .btn-primary,
         .btn-secondary,
         .btn-danger {
             border: none;
-            border-radius: 14px;
-            padding: 11px 16px;
+            border-radius: 12px;
+            padding: 10px 14px;
             cursor: pointer;
             transition: transform 0.18s ease, opacity 0.18s ease;
+            font-size: 13px;
         }
 
         .btn-primary:disabled,
@@ -310,73 +582,72 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            color: #130f22;
+            background: #111111;
+            color: #ffffff;
             font-weight: 700;
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
+            background: #ffffff;
             color: var(--text);
-            border: 1px solid rgba(167, 139, 250, 0.22);
+            border: 1px solid var(--line);
         }
 
-        .btn-secondary.active,
-        .interface-mode.active {
-            background: linear-gradient(135deg, var(--accent), var(--accent-2));
-            color: #130f22;
-            border-color: transparent;
+        .btn-secondary.active {
+            background: #111111;
+            color: #ffffff;
+            border-color: #111111;
             font-weight: 700;
-            box-shadow: 0 10px 24px rgba(139, 92, 246, 0.28);
+            box-shadow: none;
         }
 
         .btn-danger {
-            background: rgba(255, 142, 179, 0.12);
-            color: #ffe2ec;
-            border: 1px solid rgba(255, 142, 179, 0.22);
+            background: #ffffff;
+            color: var(--text);
+            border: 1px solid rgba(17, 17, 17, 0.18);
         }
 
         .btn-danger-soft {
-            background: rgba(255, 142, 179, 0.08);
-            color: #ffe2ec;
-            border: 1px solid rgba(255, 142, 179, 0.18);
+            background: #f7f7f3;
+            color: var(--text);
+            border: 1px solid rgba(17, 17, 17, 0.12);
         }
 
         .btn-inline {
-            padding: 9px 14px;
+            padding: 8px 12px;
             border-radius: 999px;
         }
 
         .hint {
             margin-top: 6px;
             color: var(--muted);
-            font-size: 12px;
-            line-height: 1.6;
+            font-size: 11px;
+            line-height: 1.5;
         }
 
         .status-box {
             display: none;
-            margin-top: 14px;
-            border-radius: 14px;
-            padding: 12px 14px;
-            line-height: 1.6;
-            font-size: 13px;
+            margin-top: 12px;
+            border-radius: 12px;
+            padding: 10px 12px;
+            line-height: 1.5;
+            font-size: 12px;
             border: 1px solid transparent;
         }
 
         .status-box.show { display: block; }
-        .status-success { background: rgba(145, 166, 255, 0.14); border-color: rgba(145, 166, 255, 0.22); }
-        .status-error { background: rgba(255, 142, 179, 0.12); border-color: rgba(255, 142, 179, 0.2); }
-        .status-loading { background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.2); }
+        .status-success { background: rgba(17, 17, 17, 0.04); border-color: rgba(17, 17, 17, 0.12); }
+        .status-error { background: rgba(17, 17, 17, 0.06); border-color: rgba(17, 17, 17, 0.18); }
+        .status-loading { background: rgba(17, 17, 17, 0.04); border-color: rgba(17, 17, 17, 0.12); }
 
         .loading-spinner {
-            width: 28px;
-            height: 28px;
+            width: 24px;
+            height: 24px;
             border-radius: 999px;
-            border: 3px solid rgba(167, 139, 250, 0.18);
-            border-top-color: rgba(167, 139, 250, 0.9);
+            border: 3px solid rgba(17, 17, 17, 0.12);
+            border-top-color: rgba(17, 17, 17, 0.78);
             animation: spin 0.9s linear infinite;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         .task-state-card {
@@ -436,9 +707,9 @@
 
         .preview-item,
         .image-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(167, 139, 250, 0.16);
-            border-radius: 16px;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 14px;
             overflow: hidden;
             position: relative;
         }
@@ -470,6 +741,30 @@
             z-index: 2;
         }
 
+        .image-quick-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 2;
+        }
+
+        .image-quick-button {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 999px;
+            background: rgba(5, 10, 18, 0.76);
+            color: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            line-height: 1;
+        }
+
         .group:has(#editImageInputLegacy) {
             display: none;
         }
@@ -481,17 +776,23 @@
             color: var(--muted);
         }
 
+        .image-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .image-card img {
             cursor: zoom-in;
         }
 
         .empty {
-            border: 1px dashed rgba(148, 163, 184, 0.24);
-            border-radius: 18px;
-            padding: 24px;
+            border: 1px dashed rgba(17, 17, 17, 0.18);
+            border-radius: 16px;
+            padding: 20px;
             color: var(--muted);
             text-align: center;
-            line-height: 1.7;
+            line-height: 1.6;
         }
 
         .lightbox {
@@ -509,11 +810,12 @@
 
         .lightbox-inner {
             width: min(96vw, 1100px);
-            background: rgba(6, 12, 24, 0.96);
-            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: transparent;
+            border: none;
             border-radius: 22px;
-            overflow: hidden;
+            overflow: visible;
             position: relative;
+            box-shadow: none;
         }
 
         .lightbox-close {
@@ -535,11 +837,13 @@
             max-height: 76vh;
             object-fit: contain;
             display: block;
-            background: #050913;
+            background: transparent;
+            border-radius: 18px;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
         }
 
         .lightbox-bar {
-            padding: 14px 16px;
+            padding: 14px 0 0;
             display: flex;
             justify-content: flex-end;
         }
@@ -559,10 +863,10 @@
 
         .info-dialog-panel {
             width: min(92vw, 560px);
-            background: rgba(6, 12, 24, 0.97);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 22px;
-            padding: 24px;
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 20px;
             position: relative;
             box-shadow: var(--shadow);
         }
@@ -622,14 +926,27 @@
         }
 
         @media (max-width: 720px) {
-            body { padding: 16px; }
+            body { padding: 14px; }
             .hero,
-            .panel-body { padding: 18px; }
-            .tabs { padding: 18px 18px 0; }
-            .hero-title-row { align-items: flex-start; }
+            .panel-body { padding: 16px; }
+            .tabs { padding: 16px 16px 0; }
+            .hero-head { align-items: flex-start; }
             .grid-2,
             .hero-steps {
                 grid-template-columns: 1fr;
+            }
+            .size-display-box {
+                min-height: 40px;
+                padding: 0 10px;
+            }
+            .size-display-value {
+                font-size: 16px;
+            }
+            .ratio-card-grid {
+                grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+            }
+            .ratio-card {
+                min-height: 60px;
             }
         }
     </style>
@@ -638,14 +955,15 @@
     <div class="shell">
         <section class="hero">
             <div class="hero-top">
-                <div>
-                    <!-- <div class="hero-kicker">GPT Image Workspace</div> -->
-                    <div class="hero-title-row">
-                        <h1>GPT 生图工作区</h1>
-                        <div class="hero-actions">
-                            <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
-                            <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
-                        </div>
+                <div class="hero-head">
+                    <div class="hero-meta-chips">
+                        <div class="hero-meta-chip is-brand">Moai</div>
+                        <div class="hero-meta-chip">记得先获取模型列表奥~</div>
+                        <div class="hero-meta-chip">有问题请联系：Milo_wr</div>
+                    </div>
+                    <div class="hero-actions">
+                        <button type="button" class="btn-secondary btn-inline" id="openStepsDialogButton">使用步骤</button>
+                        <button type="button" class="btn-secondary btn-inline" id="openSessionDialogButton">Session 信息</button>
                     </div>
                 </div>
             </div>
@@ -669,24 +987,66 @@
                             <label for="generatePrompt">提示词</label>
                             <textarea id="generatePrompt" placeholder="例如：未来感霓虹城市里的白色机甲少女，电影级光影，细节丰富。"></textarea>
                         </div>
-                        <div class="grid-2">
+                        <div class="group" id="negativePromptGroup" style="display:none;">
+                            <label for="negativePrompt">反向提示词</label>
+                            <textarea id="negativePrompt" placeholder="例如：低质量、模糊、文字、水印、畸形手指。"></textarea>
+                            <div class="hint">仅 Gemini 模型会使用这个字段。</div>
+                        </div>
+                        <div class="workflow-dimension-stack">
                             <div class="group">
-                                <label for="generateSize">基础尺寸</label>
-                                <select id="generateSize">
-                                    <option value="1024x1024">1K</option>
-                                    <option value="2048x2048">2K</option>
-                                    <option value="3840x2160">4K / 最大档</option>
-                                </select>
+                                <label>尺寸</label>
+                                <div class="size-preset-row" id="generateSizePresetRow">
+                                    <button type="button" class="size-preset-button active" data-size-option data-size="1024x1024" aria-pressed="true">1K</button>
+                                    <button type="button" class="size-preset-button" data-size-option data-size="2048x2048" aria-pressed="false">2K</button>
+                                    <button type="button" class="size-preset-button" data-size-option data-size="3840x2160" aria-pressed="false">4K</button>
+                                </div>
+                                <div class="size-display-row" aria-live="polite">
+                                    <div class="size-display-box">
+                                        <span class="size-display-prefix">W</span>
+                                        <span class="size-display-value" id="generateWidthDisplay">1024</span>
+                                    </div>
+                                    <span class="size-display-separator">×</span>
+                                    <div class="size-display-box">
+                                        <span class="size-display-prefix">H</span>
+                                        <span class="size-display-value" id="generateHeightDisplay">1024</span>
+                                    </div>
+                                </div>
+                                <div class="hint" id="generateSizeHint">尺寸会跟随当前宽高比自动展示，提交时不需要单独设置。</div>
+                                <input id="generateSize" type="hidden" value="1024x1024">
                             </div>
                             <div class="group">
-                                <label for="generateAspectRatio">画面比例</label>
-                                <select id="generateAspectRatio">
-                                    <option value="1:1">1:1 方图</option>
-                                    <option value="16:9">16:9 横图</option>
-                                    <option value="9:16">9:16 竖图</option>
-                                    <option value="4:3">4:3 横图</option>
-                                    <option value="3:4">3:4 竖图</option>
-                                </select>
+                                <label>宽高比</label>
+                                <div class="ratio-card-grid" id="generateAspectRatioGrid">
+                                    <button type="button" class="ratio-card active" data-ratio-option data-ratio="1:1" aria-pressed="true">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">1:1</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="2:3" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">2:3</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="3:2" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">3:2</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="3:4" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">3:4</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="4:3" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">4:3</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="9:16" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">9:16</span>
+                                    </button>
+                                    <button type="button" class="ratio-card" data-ratio-option data-ratio="16:9" aria-pressed="false">
+                                        <span class="ratio-card-icon" aria-hidden="true"></span>
+                                        <span class="ratio-card-label">16:9</span>
+                                    </button>
+                                </div>
+                                <input id="generateAspectRatio" type="hidden" value="1:1">
                             </div>
                         </div>
                         <div class="grid-2">
@@ -702,12 +1062,49 @@
                             <div class="group">
                                 <label for="generateQuality">生成质量</label>
                                 <select id="generateQuality">
-                                    <option value="auto">Auto</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
                                     <option value="high">High</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                    <option value="auto">Auto</option>
                                 </select>
-                                <!-- <div class="hint">当前会把比例换算成符合上游约束的 `size` 参数，再附带 `quality` 提交。</div> -->
+                            </div>
+                        </div>
+                        <div class="grid-2" data-provider-only="gpt">
+                            <div class="group">
+                                <label for="generateStyle">风格</label>
+                                <select id="generateStyle">
+                                    <option value="">无</option>
+                                    <option value="natural">Natural</option>
+                                    <option value="vivid">Vivid</option>
+                                </select>
+                            </div>
+                            <div class="group">
+                                <label for="generateBackground">背景</label>
+                                <select id="generateBackground">
+                                    <option value="auto">Auto</option>
+                                    <option value="opaque">Opaque</option>
+                                    <option value="transparent">Transparent</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid-2" data-provider-only="gpt">
+                            <div class="group">
+                                <label for="generateResponseFormat">返回格式</label>
+                                <label class="toggle-check" for="generateResponseFormatUrl">
+                                    <input id="generateResponseFormatUrl" type="checkbox">
+                                    <span>勾选后使用 `url`，默认传 `b64_json`</span>
+                                </label>
+                                <input id="generateResponseFormat" type="hidden" value="b64_json">
+                            </div>
+                            <div class="group">
+                                <label for="generateUpscale">Upscale</label>
+                                <div class="option-chip-row" id="generateUpscaleRow">
+                                    <button type="button" class="option-chip active" data-upscale-option data-upscale="">Off</button>
+                                    <button type="button" class="option-chip" data-upscale-option data-upscale="2k">2K</button>
+                                    <button type="button" class="option-chip" data-upscale-option data-upscale="4k">4K</button>
+                                </div>
+                                <input id="generateUpscale" type="hidden" value="">
+                                <div class="hint">会在本地按目标尺寸插值放大。</div>
                             </div>
                         </div>
                         <button type="button" class="btn-primary" id="generateButton">开始生成图片</button>
@@ -774,7 +1171,7 @@
                                     <option value="medium">Medium</option>
                                     <option value="high">High</option>
                                 </select>
-                                <div class="hint">原生与兼容模式都支持最多 4 张参考图；可分多次追加上传，也可以直接复用最近结果。</div>
+                                <div class="hint">最多支持 4 张参考图；可分多次追加上传，也可以直接复用最近结果。</div>
                             </div>
                         </div>
                         <div class="group">
@@ -795,20 +1192,9 @@
 
                     <div class="tab-panel" id="configPanel">
                         <div class="group">
-                            <label for="apiKey">API Key</label>
-                            <input id="apiKey" type="password" placeholder="请输入 API Key">
-                        </div>
-                        <div class="group">
-                            <label>接口类型</label>
-                            <div class="actions" style="margin-top: 4px;">
-                                <button type="button" class="btn-secondary btn-inline interface-mode active" data-mode="native" id="interfaceNativeButton">原生</button>
-                                <button type="button" class="btn-secondary btn-inline interface-mode" data-mode="compatible" id="interfaceCompatibleButton">兼容</button>
-                            </div>
-                            <div class="hint" id="interfaceModeHint">原生模式使用 `/v1/images/generations`。</div>
-                        </div>
-                        <div class="group">
-                            <label for="baseUrl">Base URL</label>
-                            <input id="baseUrl" type="text" value="{{ default_base_url }}" placeholder="https://moai.wiki">
+                            <label>Key 配置</label>
+                            <div class="key-profile-list" id="keyProfileList"></div>
+                            <button type="button" class="btn-secondary" id="addKeyProfileButton" style="margin-top: 10px;">新增 Key</button>
                         </div>
                         <div class="group">
                             <label for="modelInput">模型 ID</label>
@@ -818,11 +1204,13 @@
                                 <option value="{{ default_model }}">{{ default_model }}</option>
                             </select>
                             <div class="hint">支持手动输入，也可以先获取模型列表再选择。</div>
+                            <div class="model-binding-meta" id="modelBindingMeta">当前模型尚未绑定到某条 Key。</div>
                         </div>
                         <div class="stack-actions">
+                            <button type="button" class="btn-secondary" id="testConnectionButton">测试连接</button>
                             <button type="button" class="btn-secondary" id="fetchModelsButton">获取模型列表</button>
                             <button type="button" class="btn-secondary" id="refreshSessionButton">刷新会话状态</button>
-                            <button type="button" class="btn-danger" id="clearSessionButton">清空当前 GPT 数据</button>
+                            <button type="button" class="btn-danger" id="clearSessionButton">清空当前{{ workspace_data_label|default('图片数据') }}</button>
                         </div>
                         <div class="status-box" id="configStatus"></div>
                     </div>
@@ -834,7 +1222,7 @@
                     <div class="side-header">
                         <div>
                             <h2 style="margin: 0 0 6px;">最近结果</h2>
-                            <div class="hint" style="margin: 0;">仅展示当前 GPT 会话的本地图片结果。</div>
+                            <div class="hint" style="margin: 0;">{{ session_results_hint|default('仅展示当前图片会话的本地图片结果。') }}</div>
                         </div>
                         <button type="button" class="btn-secondary" id="refreshResultsButton">刷新结果</button>
                     </div>
@@ -883,12 +1271,19 @@
             <div class="info-session">
                 <strong>当前会话 ID</strong>
                 <div class="session-id" id="sessionIdText">{{ session_id }}</div>
-                <div>当前浏览器会话会独立保存 GPT 生图记录，不和 Gemini 或视频工作区共享。</div>
+                <div>{{ session_scope_text|default('当前浏览器会话会统一保存图片生成记录，并根据模型名称自动匹配 provider。') }}</div>
             </div>
         </div>
     </div>
 
     <script>
+        const API_PREFIX = {{ (api_prefix|default('/api/gpt-image'))|tojson }};
+        const TEST_ENDPOINT = {{ (test_endpoint|default('/api/gpt-image/test'))|tojson }};
+        const MODELS_ENDPOINT = {{ (models_endpoint|default('/api/gpt-image/models'))|tojson }};
+        const CLEAR_CONFIRM_TEXT = {{ (clear_confirm_text|default('确定要清空当前图片数据吗？这会删除本地结果和历史记录，但会保留当前接口配置。'))|tojson }};
+        const CLEAR_SUCCESS_TEXT = {{ (clear_success_text|default('已清空当前图片历史'))|tojson }};
+        const FILE_NAME_PREFIX = {{ (file_name_prefix|default('image'))|tojson }};
+        const PROVIDER_LABELS = { gpt: 'GPT', gemini: 'Gemini' };
         const tabs = document.querySelectorAll('.tab');
         const tabPanels = document.querySelectorAll('.tab-panel');
         const state = {
@@ -897,10 +1292,12 @@
             lastImageUrl: '',
             history: [],
             currentPreviewUrls: [],
-            interfaceMode: 'native',
+            keyProfiles: [],
+            modelKeyMap: {},
             saveTimer: null,
             applyingDraft: false,
             activeTaskTimer: null,
+            activeTask: null,
             taskErrors: {},
         };
         const generateTabButton = document.querySelector('.tab[data-tab="generatePanel"]');
@@ -960,11 +1357,160 @@
 
         function getConfig() {
             return {
-                api_key: document.getElementById('apiKey').value.trim(),
-                base_url: document.getElementById('baseUrl').value.trim(),
+                api_key: state.keyProfiles[0]?.api_key || '',
+                base_url: state.keyProfiles[0]?.base_url || '',
                 model: document.getElementById('modelInput').value.trim(),
-                interface_mode: state.interfaceMode,
+                key_profiles: state.keyProfiles.map((item) => ({ ...item })),
+                model_key_map: { ...state.modelKeyMap },
             };
+        }
+
+        function resolveProvider(modelName, baseUrl = '') {
+            const model = String(modelName || '').trim().toLowerCase();
+            const url = String(baseUrl || '').trim().toLowerCase();
+            if (model.includes('gemini')) return 'gemini';
+            if (model.includes('gpt') || model.includes('openai')) return 'gpt';
+            if (url.includes('googleapis') || url.includes('/v1beta/models')) return 'gemini';
+            if (url.includes('openai') || url.includes('/v1/images') || url.includes('/v1/models')) return 'gpt';
+            return '';
+        }
+
+        function syncProviderSpecificFields() {
+            const { model, base_url } = getConfig();
+            const provider = resolveProvider(model, base_url);
+            document.querySelectorAll('[data-provider-only]').forEach((node) => {
+                const expected = node.dataset.providerOnly;
+                node.style.display = !expected || !provider || expected === provider ? '' : 'none';
+            });
+            const negativePromptGroup = document.getElementById('negativePromptGroup');
+            if (negativePromptGroup) {
+                negativePromptGroup.style.display = provider === 'gemini' ? '' : 'none';
+            }
+            const statusNode = document.getElementById('configStatus');
+            if (statusNode && !statusNode.classList.contains('show') && provider) {
+                statusNode.textContent = `当前模型将按 ${PROVIDER_LABELS[provider] || provider} 协议提交。`;
+            }
+            syncSizePresetAvailability(provider, model);
+        }
+
+        function supportsHighResSize(provider, modelName) {
+            const value = String(modelName || '').trim().toLowerCase();
+            if (!value) return false;
+            const hasHighResKeyword = value.includes('2k') || value.includes('4k');
+            if (provider === 'gpt') {
+                return value.includes('codex') || hasHighResKeyword;
+            }
+            if (provider === 'gemini') {
+                return hasHighResKeyword;
+            }
+            return false;
+        }
+
+        function syncSizePresetAvailability(provider = '', modelName = '') {
+            const supported = supportsHighResSize(provider, modelName);
+            const currentValue = String(document.getElementById('generateSize')?.value || '').toLowerCase();
+            document.querySelectorAll('[data-size-option]').forEach((button) => {
+                const value = String(button.dataset.size || '').toLowerCase();
+                const isHighRes = value === '2048x2048' || value === '3840x2160';
+                const disabled = isHighRes && !supported;
+                button.classList.toggle('disabled', disabled);
+                button.disabled = disabled;
+                button.title = disabled ? '当前模型不支持' : '';
+                if (disabled && currentValue === value) {
+                    setWorkflowBaseSize(DEFAULT_WORKFLOW_BASE_SIZE, false);
+                }
+            });
+        }
+
+        function ensureKeyProfiles() {
+            if (state.keyProfiles.length) return;
+            state.keyProfiles = [{
+                id: 'key_1',
+                label: 'Key 1',
+                api_key: '',
+                base_url: '{{ default_base_url }}',
+            }];
+        }
+
+        function getKeyProfileById(profileId) {
+            return state.keyProfiles.find((item) => item.id === profileId) || null;
+        }
+
+        function syncModelBindingMeta() {
+            const model = document.getElementById('modelInput').value.trim();
+            const meta = document.getElementById('modelBindingMeta');
+            if (!meta) return;
+            const profileId = state.modelKeyMap[model];
+            const profile = getKeyProfileById(profileId);
+            if (profile && model) {
+                meta.textContent = `当前模型绑定：${profile.label} (${profile.base_url})`;
+                return;
+            }
+            meta.textContent = '当前模型尚未绑定到某条 Key。';
+        }
+
+        window.removeKeyProfile = removeKeyProfile;
+        window.updateKeyProfile = updateKeyProfile;
+
+        function renderKeyProfiles() {
+            ensureKeyProfiles();
+            const container = document.getElementById('keyProfileList');
+            if (!container) return;
+            container.innerHTML = state.keyProfiles.map((profile, index) => `
+                <div class="key-profile-card" data-key-profile-id="${profile.id}">
+                    <div class="key-profile-head">
+                        <div class="key-profile-title">${profile.label || `Key ${index + 1}`}</div>
+                        <button type="button" class="btn-danger btn-inline" onclick="removeKeyProfile('${profile.id}')" ${state.keyProfiles.length === 1 ? 'disabled' : ''}>删除</button>
+                    </div>
+                    <div class="key-profile-grid">
+                        <div class="group" style="margin-bottom:0;">
+                            <label>名称</label>
+                            <input type="text" value="${profile.label || ''}" onchange="updateKeyProfile('${profile.id}', 'label', this.value)" oninput="updateKeyProfile('${profile.id}', 'label', this.value, false)">
+                        </div>
+                        <div class="group" style="margin-bottom:0;">
+                            <label>Base URL</label>
+                            <input type="text" value="${profile.base_url || ''}" onchange="updateKeyProfile('${profile.id}', 'base_url', this.value)" oninput="updateKeyProfile('${profile.id}', 'base_url', this.value, false)">
+                        </div>
+                    </div>
+                    <div class="group" style="margin-bottom:0;">
+                        <label>API Key</label>
+                        <input type="password" value="${profile.api_key || ''}" onchange="updateKeyProfile('${profile.id}', 'api_key', this.value)" oninput="updateKeyProfile('${profile.id}', 'api_key', this.value, false)" placeholder="请输入 API Key">
+                    </div>
+                </div>
+            `).join('');
+            syncModelBindingMeta();
+        }
+
+        function updateKeyProfile(profileId, field, value, save = true) {
+            state.keyProfiles = state.keyProfiles.map((item) => item.id === profileId
+                ? { ...item, [field]: field === 'base_url' ? String(value || '').trim() : value }
+                : item
+            );
+            if (field === 'label') renderKeyProfiles();
+            else syncModelBindingMeta();
+            if (save) scheduleImageDraftSave();
+        }
+
+        function addKeyProfile() {
+            const index = state.keyProfiles.length + 1;
+            state.keyProfiles.push({
+                id: `key_${Date.now()}`,
+                label: `Key ${index}`,
+                api_key: '',
+                base_url: '{{ default_base_url }}',
+            });
+            renderKeyProfiles();
+            scheduleImageDraftSave();
+        }
+
+        function removeKeyProfile(profileId) {
+            if (state.keyProfiles.length <= 1) return;
+            state.keyProfiles = state.keyProfiles.filter((item) => item.id !== profileId);
+            Object.keys(state.modelKeyMap).forEach((model) => {
+                if (state.modelKeyMap[model] === profileId) delete state.modelKeyMap[model];
+            });
+            renderKeyProfiles();
+            scheduleImageDraftSave();
         }
 
         function getWorkflowStatusId() {
@@ -975,13 +1521,129 @@
             return state.useLastImage || state.editFiles.length > 0;
         }
 
+        const SIZE_PRESETS = {
+            '1024x1024': {
+                '1:1': '1024x1024',
+                '2:3': '768x1152',
+                '3:2': '1152x768',
+                '3:4': '768x1024',
+                '4:3': '1024x768',
+                '9:16': '720x1280',
+                '16:9': '1280x720',
+            },
+            '2048x2048': {
+                '1:1': '2048x2048',
+                '2:3': '1456x2176',
+                '3:2': '2176x1456',
+                '3:4': '1536x2048',
+                '4:3': '2048x1536',
+                '9:16': '1088x1920',
+                '16:9': '1920x1088',
+            },
+            '3840x2160': {
+                '1:1': '2880x2880',
+                '2:3': '2176x3264',
+                '3:2': '3264x2176',
+                '3:4': '2448x3264',
+                '4:3': '3264x2448',
+                '9:16': '2160x3840',
+                '16:9': '3840x2160',
+            },
+        };
+
+        const DEFAULT_WORKFLOW_BASE_SIZE = '1024x1024';
+        const SUPPORTED_WORKFLOW_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9'];
+        const SIZE_PRESET_LABELS = {
+            '1024x1024': '1K',
+            '2048x2048': '2K',
+            '3840x2160': '4K',
+        };
+
+        function resolveSize(baseSize, aspectRatio) {
+            return (SIZE_PRESETS[baseSize] || SIZE_PRESETS[DEFAULT_WORKFLOW_BASE_SIZE])[aspectRatio] || '1024x1024';
+        }
+
+        function normalizeWorkflowBaseSize(size) {
+            if (SIZE_PRESETS[size]) return size;
+            const matchedBase = Object.entries(SIZE_PRESETS).find(([, mapping]) =>
+                Object.values(mapping).includes(size)
+            );
+            return matchedBase ? matchedBase[0] : DEFAULT_WORKFLOW_BASE_SIZE;
+        }
+
+        function inferAspectRatioFromSize(size) {
+            for (const mapping of Object.values(SIZE_PRESETS)) {
+                for (const [ratio, preset] of Object.entries(mapping)) {
+                    if (preset === size) return ratio;
+                }
+            }
+            return '1:1';
+        }
+
+        function syncWorkflowSizeDisplay() {
+            const baseSize = normalizeWorkflowBaseSize(document.getElementById('generateSize').value || DEFAULT_WORKFLOW_BASE_SIZE);
+            const aspectRatio = document.getElementById('generateAspectRatio').value || '1:1';
+            const resolvedSize = resolveSize(baseSize, aspectRatio);
+            const [width, height] = resolvedSize.split('x');
+            document.getElementById('generateSize').value = baseSize;
+            document.querySelectorAll('[data-size-option]').forEach((button) => {
+                const active = button.dataset.size === baseSize;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+            document.getElementById('generateWidthDisplay').textContent = width || '1024';
+            document.getElementById('generateHeightDisplay').textContent = height || '1024';
+            const presetLabel = SIZE_PRESET_LABELS[baseSize] || '1K';
+            document.getElementById('generateSizeHint').textContent = `当前 ${presetLabel} 档输出尺寸 ${resolvedSize}，已按 16 对齐展示。`;
+        }
+
+        function setWorkflowBaseSize(size, save = true) {
+            const nextSize = SIZE_PRESETS[size] ? size : DEFAULT_WORKFLOW_BASE_SIZE;
+            document.getElementById('generateSize').value = nextSize;
+            syncWorkflowSizeDisplay();
+            if (save) scheduleImageDraftSave();
+        }
+
+        function setWorkflowAspectRatio(ratio, save = true) {
+            const nextRatio = SUPPORTED_WORKFLOW_RATIOS.includes(ratio) ? ratio : '1:1';
+            document.getElementById('generateAspectRatio').value = nextRatio;
+            document.querySelectorAll('[data-ratio-option]').forEach((button) => {
+                const active = button.dataset.ratio === nextRatio;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+            syncWorkflowSizeDisplay();
+            if (save) scheduleImageDraftSave();
+        }
+
+        function syncResponseFormatControl(save = true) {
+            const checked = document.getElementById('generateResponseFormatUrl').checked;
+            document.getElementById('generateResponseFormat').value = checked ? 'url' : 'b64_json';
+            if (save) scheduleImageDraftSave();
+        }
+
+        function setWorkflowUpscale(value, save = true) {
+            const nextValue = ['2k', '4k'].includes(value) ? value : '';
+            document.getElementById('generateUpscale').value = nextValue;
+            document.querySelectorAll('[data-upscale-option]').forEach((button) => {
+                const active = button.dataset.upscale === nextValue;
+                button.classList.toggle('active', active);
+            });
+            if (save) scheduleImageDraftSave();
+        }
+
         function getWorkflowValues() {
             return {
                 prompt: document.getElementById('generatePrompt').value.trim(),
+                negative_prompt: document.getElementById('negativePrompt')?.value.trim() || '',
                 size: document.getElementById('generateSize').value,
                 aspect_ratio: document.getElementById('generateAspectRatio').value,
                 image_count: Number(document.getElementById('generateCount').value),
                 quality: document.getElementById('generateQuality').value,
+                style: document.getElementById('generateStyle').value,
+                background: document.getElementById('generateBackground').value,
+                response_format: document.getElementById('generateResponseFormat').value,
+                upscale: document.getElementById('generateUpscale').value,
             };
         }
 
@@ -1038,7 +1700,7 @@
             });
         }
 
-        async function collectGptDraft() {
+        async function collectImageDraft() {
             const references = await Promise.all(state.editFiles.map(async (file) => ({
                 name: file.name,
                 size: file.size,
@@ -1048,38 +1710,48 @@
             return {
                 ...getConfig(),
                 generate_prompt: workflow.prompt,
+                generate_negative_prompt: workflow.negative_prompt,
                 generate_size: workflow.size,
                 generate_aspect_ratio: workflow.aspect_ratio,
                 generate_count: String(workflow.image_count),
                 generate_quality: workflow.quality,
+                generate_style: workflow.style,
+                generate_background: workflow.background,
+                generate_response_format: workflow.response_format,
+                generate_upscale: workflow.upscale,
                 edit_prompt: workflow.prompt,
+                edit_negative_prompt: workflow.negative_prompt,
                 edit_size: workflow.size,
                 edit_aspect_ratio: workflow.aspect_ratio,
                 edit_count: String(workflow.image_count),
                 edit_quality: workflow.quality,
+                edit_style: workflow.style,
+                edit_background: workflow.background,
+                edit_response_format: workflow.response_format,
+                edit_upscale: workflow.upscale,
                 use_last_image: state.useLastImage,
                 edit_references: references.slice(0, 4),
             };
         }
 
-        async function saveGptDraft() {
+        async function saveImageDraft() {
             if (state.applyingDraft) return;
             try {
-                const draft = await collectGptDraft();
-                await fetch('/api/gpt-image/session', {
+                const draft = await collectImageDraft();
+                await fetch(`${API_PREFIX}/session`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(draft),
                 });
             } catch (error) {
-                console.error('saveGptDraft failed', error);
+                console.error('saveImageDraft failed', error);
             }
         }
 
-        function scheduleGptDraftSave() {
+        function scheduleImageDraftSave() {
             if (state.applyingDraft) return;
             clearTimeout(state.saveTimer);
-            state.saveTimer = setTimeout(saveGptDraft, 300);
+            state.saveTimer = setTimeout(saveImageDraft, 300);
         }
 
         function clearCurrentPreviewUrls() {
@@ -1095,9 +1767,10 @@
             } else {
                 select.value = '';
             }
+            syncModelBindingMeta();
         }
 
-        function updateModelOptions(models) {
+        function updateModelOptions(models, modelKeyMap = {}) {
             const select = document.getElementById('modelSelect');
             const values = Array.from(new Set(
                 (Array.isArray(models) ? models : [])
@@ -1107,9 +1780,11 @@
             if (!values.includes('{{ default_model }}')) {
                 values.unshift('{{ default_model }}');
             }
+            state.modelKeyMap = { ...state.modelKeyMap, ...(modelKeyMap || {}) };
             select.innerHTML = ['<option value="">从已获取模型中选择</option>']
                 .concat(values.map((item) => `<option value="${item}">${item}</option>`))
                 .join('');
+            syncModelBindingMeta();
         }
 
         function setSelectValue(id, value) {
@@ -1122,13 +1797,16 @@
             el.value = value;
         }
 
-        function applyGptDraft(draft = {}) {
+        function applyImageDraft(draft = {}) {
             state.applyingDraft = true;
             const preferEditDraft = Boolean(draft.use_last_image)
                 || (Array.isArray(draft.edit_references) && draft.edit_references.length > 0);
             const promptValue = preferEditDraft
                 ? (draft.edit_prompt || draft.generate_prompt || '')
                 : (draft.generate_prompt || draft.edit_prompt || '');
+            const negativePromptValue = preferEditDraft
+                ? (draft.edit_negative_prompt || draft.generate_negative_prompt || '')
+                : (draft.generate_negative_prompt || draft.edit_negative_prompt || '');
             const sizeValue = preferEditDraft
                 ? (draft.edit_size || draft.generate_size)
                 : (draft.generate_size || draft.edit_size);
@@ -1141,15 +1819,52 @@
             const qualityValue = preferEditDraft
                 ? (draft.edit_quality || draft.generate_quality)
                 : (draft.generate_quality || draft.edit_quality);
-            document.getElementById('apiKey').value = draft.api_key || '';
-            document.getElementById('baseUrl').value = draft.base_url || document.getElementById('baseUrl').value;
+            const styleValue = preferEditDraft
+                ? (draft.edit_style || draft.generate_style)
+                : (draft.generate_style || draft.edit_style);
+            const backgroundValue = preferEditDraft
+                ? (draft.edit_background || draft.generate_background)
+                : (draft.generate_background || draft.edit_background);
+            const responseFormatValue = preferEditDraft
+                ? (draft.edit_response_format || draft.generate_response_format)
+                : (draft.generate_response_format || draft.edit_response_format);
+            const upscaleValue = preferEditDraft
+                ? (draft.edit_upscale || draft.generate_upscale)
+                : (draft.generate_upscale || draft.edit_upscale);
+            state.keyProfiles = Array.isArray(draft.key_profiles) && draft.key_profiles.length
+                ? draft.key_profiles.map((item, index) => ({
+                    id: item.id || `key_${index + 1}`,
+                    label: item.label || `Key ${index + 1}`,
+                    api_key: item.api_key || '',
+                    base_url: item.base_url || '{{ default_base_url }}',
+                }))
+                : [{
+                    id: 'key_1',
+                    label: 'Key 1',
+                    api_key: draft.api_key || '',
+                    base_url: draft.base_url || '{{ default_base_url }}',
+                }];
+            state.modelKeyMap = typeof draft.model_key_map === 'object' && draft.model_key_map
+                ? { ...draft.model_key_map }
+                : {};
+            renderKeyProfiles();
             document.getElementById('modelInput').value = draft.model || document.getElementById('modelInput').value;
-            setInterfaceMode(draft.interface_mode || state.interfaceMode);
+            const normalizedBaseSize = normalizeWorkflowBaseSize(sizeValue);
+            const normalizedAspectRatio = SUPPORTED_WORKFLOW_RATIOS.includes(aspectRatioValue)
+                ? aspectRatioValue
+                : inferAspectRatioFromSize(sizeValue);
             document.getElementById('generatePrompt').value = promptValue;
-            setSelectValue('generateSize', sizeValue);
-            setSelectValue('generateAspectRatio', aspectRatioValue);
+            document.getElementById('negativePrompt').value = negativePromptValue;
+            setSelectValue('generateSize', normalizedBaseSize);
+            setWorkflowBaseSize(normalizedBaseSize, false);
+            setWorkflowAspectRatio(normalizedAspectRatio, false);
             setSelectValue('generateCount', countValue);
             setSelectValue('generateQuality', qualityValue);
+            setSelectValue('generateStyle', styleValue || '');
+            setSelectValue('generateBackground', backgroundValue || 'auto');
+            document.getElementById('generateResponseFormatUrl').checked = (responseFormatValue || 'b64_json') === 'url';
+            syncResponseFormatControl(false);
+            setWorkflowUpscale(upscaleValue || '', false);
             const references = Array.isArray(draft.edit_references) ? draft.edit_references.slice(0, 4) : [];
             state.editFiles = references
                 .filter((item) => item && item.dataURL)
@@ -1158,6 +1873,8 @@
             clearCurrentPreviewUrls();
             state.currentPreviewUrls = state.editFiles.map((file) => URL.createObjectURL(file));
             syncModelDisplays();
+            syncProviderSpecificFields();
+            syncWorkflowSizeDisplay();
             renderEditPreview();
             state.applyingDraft = false;
         }
@@ -1174,43 +1891,6 @@
                 if (detail && !parts.includes(detail)) parts.push(detail);
             }
             return parts.join(' | ') || fallback;
-        }
-
-        function resolveSize(baseSize, aspectRatio) {
-            const presets = {
-                '1024x1024': {
-                    '1:1': '1024x1024',
-                    '16:9': '1280x720',
-                    '9:16': '720x1280',
-                    '4:3': '1024x768',
-                    '3:4': '768x1024',
-                },
-                '2048x2048': {
-                    '1:1': '2048x2048',
-                    '16:9': '2048x1152',
-                    '9:16': '1152x2048',
-                    '4:3': '2048x1536',
-                    '3:4': '1536x2048',
-                },
-                '3840x2160': {
-                    '1:1': '2048x2048',
-                    '16:9': '3840x2160',
-                    '9:16': '2160x3840',
-                    '4:3': '3264x2448',
-                    '3:4': '2448x3264',
-                },
-            };
-            return (presets[baseSize] || presets['1024x1024'])[aspectRatio] || '1024x1024';
-        }
-
-        function setInterfaceMode(mode) {
-            state.interfaceMode = mode === 'compatible' ? 'compatible' : 'native';
-            document.querySelectorAll('.interface-mode').forEach((button) => {
-                button.classList.toggle('active', button.dataset.mode === state.interfaceMode);
-            });
-            document.getElementById('interfaceModeHint').textContent = state.interfaceMode === 'compatible'
-                ? '兼容模式使用 `/v1/chat/completions`。'
-                : '原生模式使用 `/v1/images/generations`。';
         }
 
         function updateWorkflowModeHint() {
@@ -1246,6 +1926,7 @@
             if (state.useLastImage && state.lastImageUrl) {
                 container.innerHTML = `
                     <div class="preview-item">
+                        <button type="button" class="preview-remove" onclick="clearLastReference(event)">×</button>
                         <img src="${state.lastImageUrl}?t=${Date.now()}" alt="recent-result" onclick="openLightbox('${state.lastImageUrl}')">
                         <div class="preview-meta">当前使用：最近结果</div>
                     </div>
@@ -1274,7 +1955,7 @@
             clearCurrentPreviewUrls();
             editImageInput.value = '';
             renderEditPreview();
-            if (save !== false) scheduleGptDraftSave();
+            if (save !== false) scheduleImageDraftSave();
         }
 
         async function handleEditImageSelect(event) {
@@ -1302,7 +1983,46 @@
             event.target.value = '';
             renderEditPreview();
             resetStatus(getWorkflowStatusId());
-            scheduleGptDraftSave();
+            scheduleImageDraftSave();
+        }
+
+        function clearLastReference(event) {
+            if (event) event.stopPropagation();
+            state.useLastImage = false;
+            renderEditPreview();
+            scheduleImageDraftSave();
+        }
+
+        async function addResultImageToReferences(src, event) {
+            if (event) event.stopPropagation();
+            if (!src) return;
+            try {
+                const response = await fetch(src);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const blob = await response.blob();
+                const filename = src.split('/').pop()?.split('?')[0] || `reference_${Date.now()}.png`;
+                const file = new File([blob], filename, { type: blob.type || 'image/png' });
+                const compressed = await compressReferenceFile(file);
+                const nextFiles = [];
+                const seen = new Set();
+                const appendFile = (item) => {
+                    const key = `${item.name}_${item.size}_${item.lastModified}`;
+                    if (seen.has(key) || nextFiles.length >= 4) return;
+                    seen.add(key);
+                    nextFiles.push(item);
+                };
+                state.editFiles.forEach((item) => appendFile(item));
+                appendFile(compressed);
+                state.useLastImage = false;
+                clearCurrentPreviewUrls();
+                state.editFiles = nextFiles;
+                state.currentPreviewUrls = state.editFiles.map((item) => URL.createObjectURL(item));
+                renderEditPreview();
+                showStatus(getWorkflowStatusId(), '已追加到参考图列表。', 'success');
+                scheduleImageDraftSave();
+            } catch (error) {
+                showStatus(getWorkflowStatusId(), `追加参考图失败：${error.message}`, 'error');
+            }
         }
 
         function removeEditImage(index, event) {
@@ -1314,7 +2034,7 @@
             state.currentPreviewUrls = state.editFiles.map((file) => URL.createObjectURL(file));
             editImageInput.value = '';
             renderEditPreview();
-            scheduleGptDraftSave();
+            scheduleImageDraftSave();
         }
 
         function useLastGeneratedImage() {
@@ -1328,7 +2048,7 @@
             clearCurrentPreviewUrls();
             editImageInput.value = '';
             renderEditPreview();
-            scheduleGptDraftSave();
+            scheduleImageDraftSave();
         }
 
         function setBusy(buttonId, busy, loadingText, idleText) {
@@ -1352,10 +2072,13 @@
         function renderImageCards(images = [], timestamp = Date.now()) {
             return images.map((src, index) => `
                 <div class="image-card">
+                    <div class="image-quick-actions">
+                        <button type="button" class="image-quick-button" title="下载" aria-label="下载" onclick="downloadImage(event, '${src}', '${FILE_NAME_PREFIX}_${index + 1}.png')">↓</button>
+                        <button type="button" class="image-quick-button" title="删除" aria-label="删除" onclick="deleteResultImage(event, '${src}')">×</button>
+                    </div>
                     <img src="${src}?t=${timestamp}" alt="result-${index + 1}" onclick="openLightbox('${src}')">
                     <div class="image-actions">
-                        <button type="button" class="btn-secondary" onclick="downloadImage(event, '${src}', 'gpt_image_${index + 1}.png')">下载</button>
-                        <button type="button" class="btn-secondary btn-danger-soft" onclick="deleteResultImage(event, '${src}')">删除</button>
+                        <button type="button" class="btn-secondary" onclick="addResultImageToReferences('${src}', event)">设为参考图</button>
                     </div>
                 </div>
             `).join('');
@@ -1365,20 +2088,24 @@
             return collectHistoryImages(state.history, state.lastImageUrl);
         }
 
-        function renderResultLoading(taskId, label = '图片生成中') {
+        function renderResultLoading(taskId, label = '图片生成中', count = 1) {
             const container = document.getElementById('resultContainer');
             container.className = 'gallery';
             const images = getCurrentResultImages();
-            container.innerHTML = `
+            const total = Math.max(1, Number(count) || 1);
+            const loadingCards = Array.from({ length: total }, (_, index) => `
                 <div class="image-card task-state-card">
                     <div class="task-state-body">
                         <div class="loading-spinner"></div>
                         <strong>${label}</strong>
                         <p>任务 ID：${taskId || '-'}</p>
-                        <p>完成后自动显示新图</p>
+                        <p>${total > 1 ? `第 ${index + 1} / ${total} 张生成中` : '完成后自动显示新图'}</p>
                     </div>
                     <div class="image-actions">生成中</div>
                 </div>
+            `).join('');
+            container.innerHTML = `
+                ${loadingCards}
                 ${renderImageCards(images)}
             `.trim();
         }
@@ -1395,44 +2122,56 @@
                         <p>${message || '任务失败，未返回更多说明。'}</p>
                     </div>
                     <div class="image-actions">
-                        <button type="button" class="btn-secondary btn-danger-soft" onclick="showGptTaskError('${taskId || ''}')">查看具体失败内容</button>
+                        <button type="button" class="btn-secondary btn-danger-soft" onclick="showImageTaskError('${taskId || ''}')">查看具体失败内容</button>
                     </div>
                 </div>
                 ${renderImageCards(images)}
             `.trim();
         }
 
-        function showGptTaskError(taskId) {
+        function showImageTaskError(taskId) {
             const detail = state.taskErrors[taskId] || {};
             alert(typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2));
         }
 
-        function stopGptTaskPolling() {
+        function setActiveImageTask(taskId, statusId, label, successFallback, count = 1) {
+            state.activeTask = taskId ? { taskId, statusId, label, successFallback, count } : null;
+        }
+
+        function clearActiveImageTask(taskId = '') {
+            if (!taskId || (state.activeTask && state.activeTask.taskId === taskId)) {
+                state.activeTask = null;
+            }
+        }
+
+        function stopImageTaskPolling() {
             if (state.activeTaskTimer) {
                 clearTimeout(state.activeTaskTimer);
                 state.activeTaskTimer = null;
             }
         }
 
-        async function pollGptImageTask(taskId, statusId, successFallback) {
+        async function pollImageTask(taskId, statusId, successFallback) {
             try {
-                const response = await fetch(`/api/gpt-image/tasks/${encodeURIComponent(taskId)}`);
+                const response = await fetch(`${API_PREFIX}/tasks/${encodeURIComponent(taskId)}`);
                 const task = await response.json();
                 if (!response.ok || !task.success) {
                     throw new Error(task.message || '查询任务失败');
                 }
 
                 if (task.status === 'succeeded') {
-                    stopGptTaskPolling();
+                    stopImageTaskPolling();
+                    clearActiveImageTask(taskId);
                     const result = task.result || {};
                     renderResultImages(result.images || []);
                     showStatus(statusId, result.message || successFallback || '生成成功', 'success');
-                    await refreshGptSession();
+                    await refreshImageSession();
                     return;
                 }
 
                 if (task.status === 'failed') {
-                    stopGptTaskPolling();
+                    stopImageTaskPolling();
+                    clearActiveImageTask(taskId);
                     const detail = task.error || { message: task.message };
                     renderResultFailure(taskId, task.message || '生成失败', detail);
                     showStatus(statusId, formatApiError(detail, '生成失败'), 'error');
@@ -1440,9 +2179,10 @@
                 }
 
                 showStatus(statusId, task.message || '后台正在生成图片...', 'loading');
-                state.activeTaskTimer = setTimeout(() => pollGptImageTask(taskId, statusId, successFallback), 1500);
+                state.activeTaskTimer = setTimeout(() => pollImageTask(taskId, statusId, successFallback), 1500);
             } catch (error) {
-                stopGptTaskPolling();
+                stopImageTaskPolling();
+                clearActiveImageTask(taskId);
                 renderResultFailure(taskId, error.message, { message: error.message });
                 showStatus(statusId, `查询任务失败：${error.message}`, 'error');
             }
@@ -1469,7 +2209,7 @@
             if (!confirm('确定要删除这张图片吗？')) return;
 
             try {
-                const response = await fetch('/api/gpt-image/result', {
+                const response = await fetch(`${API_PREFIX}/result`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image_url: src }),
@@ -1480,7 +2220,7 @@
                     return;
                 }
                 showStatus('configStatus', result.message || '图片已删除', 'success');
-                await refreshGptSession();
+                await refreshImageSession();
             } catch (error) {
                 showStatus('configStatus', `删除失败：${error.message}`, 'error');
             }
@@ -1492,7 +2232,7 @@
                 ? src
                 : `${src}?t=${Date.now()}`;
             document.getElementById('lightboxImg').src = previewSrc;
-            document.getElementById('lightboxDownload').onclick = (event) => downloadImage(event, src, `gpt_image_${Date.now()}.png`);
+            document.getElementById('lightboxDownload').onclick = (event) => downloadImage(event, src, `${FILE_NAME_PREFIX}_${Date.now()}.png`);
             lightbox.classList.add('active');
             document.body.style.overflow = 'hidden';
         }
@@ -1548,24 +2288,24 @@
         }
 
         async function fetchModels() {
-            const { api_key, base_url, interface_mode } = getConfig();
-            if (!api_key) {
-                showStatus('configStatus', '请先填写 API Key。', 'error');
+            const { key_profiles } = getConfig();
+            if (!Array.isArray(key_profiles) || !key_profiles.some((item) => item.api_key && item.base_url)) {
+                showStatus('configStatus', '请至少配置 1 组 API Key 与 Base URL。', 'error');
                 return;
             }
             resetStatus('configStatus');
             showStatus('configStatus', '正在获取模型列表...', 'loading');
             try {
-                const response = await fetch('/api/gpt-image/models', {
+                const response = await fetch(MODELS_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key, base_url, interface_mode }),
+                    body: JSON.stringify({ key_profiles }),
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || '获取模型列表失败');
                 }
-                updateModelOptions(result.models || []);
+                updateModelOptions(result.models || [], result.model_key_map || {});
                 if (!document.getElementById('modelInput').value.trim() && result.models?.length) {
                     document.getElementById('modelInput').value = result.models[0];
                     syncModelDisplays();
@@ -1576,45 +2316,116 @@
             }
         }
 
-        async function refreshGptSession() {
+        async function testConnection() {
+            const { key_profiles, model } = getConfig();
+            if (!Array.isArray(key_profiles) || !key_profiles.some((item) => item.api_key && item.base_url)) {
+                showStatus('configStatus', '请至少配置 1 组 API Key 与 Base URL。', 'error');
+                return;
+            }
+            resetStatus('configStatus');
+            showStatus('configStatus', '正在测试连接...', 'loading');
             try {
-                const response = await fetch('/api/gpt-image/session');
+                const response = await fetch(TEST_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_profiles, model }),
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || '连接测试失败');
+                }
+                const provider = result.provider ? `provider=${result.provider}` : '';
+                const message = [result.message || '连接测试成功', provider].filter(Boolean).join(' | ');
+                showStatus('configStatus', message, 'success');
+            } catch (error) {
+                showStatus('configStatus', `连接测试失败：${error.message}`, 'error');
+            }
+        }
+
+        async function refreshImageTaskCard() {
+            if (!state.activeTask?.taskId) return false;
+
+            const { taskId, statusId, label, successFallback, count } = state.activeTask;
+            try {
+                const response = await fetch(`${API_PREFIX}/tasks/${encodeURIComponent(taskId)}`);
+                const task = await response.json();
+                if (!response.ok || !task.success) {
+                    throw new Error(task.message || '查询任务失败');
+                }
+
+                if (task.status === 'succeeded') {
+                    stopImageTaskPolling();
+                    clearActiveImageTask(taskId);
+                    const result = task.result || {};
+                    renderResultImages(result.images || []);
+                    showStatus(statusId, result.message || successFallback || '生成成功', 'success');
+                    await refreshImageSession({ preserveActiveTask: false });
+                    return true;
+                }
+
+                if (task.status === 'failed') {
+                    stopImageTaskPolling();
+                    clearActiveImageTask(taskId);
+                    const detail = task.error || { message: task.message };
+                    renderResultFailure(taskId, task.message || '生成失败', detail);
+                    showStatus(statusId, formatApiError(detail, '生成失败'), 'error');
+                    return true;
+                }
+
+                renderResultLoading(taskId, label || '图片生成中', count || 1);
+                showStatus(statusId, task.message || '后台正在生成图片...', 'loading');
+                return true;
+            } catch (error) {
+                renderResultLoading(taskId, label || '图片生成中', count || 1);
+                showStatus(statusId, `刷新任务状态失败：${error.message}`, 'error');
+                return true;
+            }
+        }
+
+        async function refreshImageSession(options = {}) {
+            const { preserveActiveTask = true } = options;
+            try {
+                const response = await fetch(`${API_PREFIX}/session`);
                 const result = await response.json();
                 if (!result.success) return;
                 document.getElementById('sessionIdText').textContent = result.session_id;
                 state.lastImageUrl = result.last_image_url || '';
                 state.history = Array.isArray(result.history) ? result.history : [];
-                if (result.draft) applyGptDraft(result.draft);
+                if (result.draft) applyImageDraft(result.draft);
                 renderResultImages(collectHistoryImages(state.history, state.lastImageUrl));
+                if (preserveActiveTask) {
+                    await refreshImageTaskCard();
+                }
                 renderEditPreview();
             } catch (error) {
                 showStatus('configStatus', `获取会话状态失败：${error.message}`, 'error');
             }
         }
 
-        async function clearGptSession() {
-            if (!confirm('确定要清空当前 GPT 生图会话吗？这会删除本地结果和历史记录。')) return;
+        async function clearImageSession() {
+            if (!confirm(CLEAR_CONFIRM_TEXT)) return;
             try {
-                const response = await fetch('/api/gpt-image/session/clear', { method: 'POST' });
+                const response = await fetch(`${API_PREFIX}/session/clear`, { method: 'POST' });
                 const result = await response.json();
                 if (!result.success) {
                     showStatus('configStatus', result.message || '清空失败', 'error');
                     return;
                 }
-                stopGptTaskPolling();
+                stopImageTaskPolling();
+                clearActiveImageTask();
                 clearEditImage(false);
                 state.lastImageUrl = '';
                 state.history = [];
                 state.taskErrors = {};
                 renderResultImages([]);
-                showStatus('configStatus', result.message || '已清空当前 GPT 会话', 'success');
-                await refreshGptSession();
+                showStatus('configStatus', result.message || CLEAR_SUCCESS_TEXT, 'success');
+                await refreshImageSession();
             } catch (error) {
                 showStatus('configStatus', `清空失败：${error.message}`, 'error');
             }
         }
 
-        async function submitGptWorkflow() {
+        async function submitImageWorkflow() {
             const workflow = getWorkflowValues();
             const statusId = getWorkflowStatusId();
             const buttonId = 'generateButton';
@@ -1625,15 +2436,20 @@
                 const payload = {
                     ...getConfig(),
                     prompt: workflow.prompt,
+                    negative_prompt: workflow.negative_prompt,
                     image_count: workflow.image_count,
                     quality: workflow.quality,
+                    background: workflow.background,
+                    response_format: workflow.response_format,
+                    upscale: workflow.upscale,
                     aspect_ratio: workflow.aspect_ratio,
                     size: resolveSize(workflow.size, workflow.aspect_ratio),
                 };
+                if (workflow.style) payload.style = workflow.style;
                 showStatus(statusId, '正在提交文生图请求...', 'loading');
                 try {
-                    await saveGptDraft();
-                    const response = await fetch('/api/gpt-image/tasks', {
+                    await saveImageDraft();
+                    const response = await fetch(`${API_PREFIX}/tasks`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ mode: 'generate', payload }),
@@ -1643,10 +2459,11 @@
                         showStatus(statusId, formatApiError(result, '生成失败'), 'error');
                         return;
                     }
-                    renderResultLoading(result.task_id, '文生图生成中');
+                    setActiveImageTask(result.task_id, statusId, '文生图生成中', '生成成功', workflow.image_count);
+                    renderResultLoading(result.task_id, '文生图生成中', workflow.image_count);
                     showStatus(statusId, result.message || '任务已提交，后台正在生成。', 'loading');
-                    stopGptTaskPolling();
-                    state.activeTaskTimer = setTimeout(() => pollGptImageTask(result.task_id, statusId, '生成成功'), 600);
+                    stopImageTaskPolling();
+                    state.activeTaskTimer = setTimeout(() => pollImageTask(result.task_id, statusId, '生成成功'), 600);
                 } catch (error) {
                     showStatus(statusId, `生成失败：${error.message}`, 'error');
                 } finally {
@@ -1660,9 +2477,15 @@
             formData.append('api_key', config.api_key);
             formData.append('base_url', config.base_url);
             formData.append('model', config.model);
-            formData.append('interface_mode', config.interface_mode);
+            formData.append('key_profiles', JSON.stringify(config.key_profiles || []));
+            formData.append('model_key_map', JSON.stringify(config.model_key_map || {}));
             formData.append('prompt', workflow.prompt);
+            formData.append('negative_prompt', workflow.negative_prompt);
             formData.append('quality', workflow.quality);
+            if (workflow.style) formData.append('style', workflow.style);
+            formData.append('background', workflow.background);
+            formData.append('response_format', workflow.response_format);
+            formData.append('upscale', workflow.upscale);
             formData.append('aspect_ratio', workflow.aspect_ratio);
             formData.append('size', resolveSize(workflow.size, workflow.aspect_ratio));
             formData.append('image_count', String(workflow.image_count));
@@ -1674,8 +2497,8 @@
             }
             showStatus(statusId, '正在提交图生图请求...', 'loading');
             try {
-                await saveGptDraft();
-                const response = await fetch('/api/gpt-image/tasks', {
+                await saveImageDraft();
+                const response = await fetch(`${API_PREFIX}/tasks`, {
                     method: 'POST',
                     body: formData,
                 });
@@ -1684,10 +2507,11 @@
                     showStatus(statusId, formatApiError(result, '编辑失败'), 'error');
                     return;
                 }
-                renderResultLoading(result.task_id, '图生图生成中');
+                setActiveImageTask(result.task_id, statusId, '图生图生成中', '编辑成功', workflow.image_count);
+                renderResultLoading(result.task_id, '图生图生成中', workflow.image_count);
                 showStatus(statusId, result.message || '任务已提交，后台正在生成。', 'loading');
-                stopGptTaskPolling();
-                state.activeTaskTimer = setTimeout(() => pollGptImageTask(result.task_id, statusId, '编辑成功'), 600);
+                stopImageTaskPolling();
+                state.activeTaskTimer = setTimeout(() => pollImageTask(result.task_id, statusId, '编辑成功'), 600);
             } catch (error) {
                 showStatus(statusId, `编辑失败：${error.message}`, 'error');
             } finally {
@@ -1695,46 +2519,64 @@
             }
         }
 
+        document.getElementById('addKeyProfileButton').addEventListener('click', addKeyProfile);
+        document.getElementById('testConnectionButton').addEventListener('click', testConnection);
         document.getElementById('fetchModelsButton').addEventListener('click', fetchModels);
-        document.querySelectorAll('.interface-mode').forEach((button) => {
-            button.addEventListener('click', () => {
-                setInterfaceMode(button.dataset.mode);
-                scheduleGptDraftSave();
-            });
-        });
         document.getElementById('modelInput').addEventListener('input', () => {
             syncModelDisplays();
-            scheduleGptDraftSave();
+            syncProviderSpecificFields();
+            scheduleImageDraftSave();
         });
         document.getElementById('modelSelect').addEventListener('change', (event) => {
             if (!event.target.value) return;
             document.getElementById('modelInput').value = event.target.value;
+            if (!state.modelKeyMap[event.target.value] && state.keyProfiles[0]?.id) {
+                state.modelKeyMap[event.target.value] = state.keyProfiles[0].id;
+            }
             syncModelDisplays();
-            scheduleGptDraftSave();
+            syncProviderSpecificFields();
+            scheduleImageDraftSave();
         });
         pickEditImageButton.addEventListener('click', () => editImageInput.click());
         editImageInput.addEventListener('change', handleEditImageSelect);
         useLastImageButton.addEventListener('click', useLastGeneratedImage);
         clearEditImageButton.addEventListener('click', clearEditImage);
-        document.getElementById('refreshSessionButton').addEventListener('click', refreshGptSession);
-        document.getElementById('refreshResultsButton').addEventListener('click', refreshGptSession);
-        document.getElementById('clearSessionButton').addEventListener('click', clearGptSession);
-        document.getElementById('generateButton').addEventListener('click', submitGptWorkflow);
+        document.getElementById('refreshSessionButton').addEventListener('click', refreshImageSession);
+        document.getElementById('refreshResultsButton').addEventListener('click', refreshImageSession);
+        document.getElementById('clearSessionButton').addEventListener('click', clearImageSession);
+        document.getElementById('generateButton').addEventListener('click', submitImageWorkflow);
         document.getElementById('openStepsDialogButton').addEventListener('click', () => openInfoDialog('stepsDialog'));
         document.getElementById('openSessionDialogButton').addEventListener('click', () => openInfoDialog('sessionDialog'));
+        document.querySelectorAll('[data-size-option]').forEach((button) => {
+            button.addEventListener('click', () => setWorkflowBaseSize(button.dataset.size));
+        });
+        document.querySelectorAll('[data-ratio-option]').forEach((button) => {
+            button.addEventListener('click', () => setWorkflowAspectRatio(button.dataset.ratio));
+        });
+        document.querySelectorAll('[data-upscale-option]').forEach((button) => {
+            button.addEventListener('click', () => setWorkflowUpscale(button.dataset.upscale));
+        });
+        document.getElementById('generateResponseFormatUrl').addEventListener('change', () => syncResponseFormatControl());
         [
             'apiKey',
             'baseUrl',
             'generatePrompt',
+            'negativePrompt',
             'generateSize',
             'generateAspectRatio',
             'generateCount',
             'generateQuality',
+            'generateStyle',
+            'generateBackground',
         ].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.addEventListener('input', scheduleGptDraftSave);
-            el.addEventListener('change', scheduleGptDraftSave);
+            el.addEventListener('input', scheduleImageDraftSave);
+            el.addEventListener('change', scheduleImageDraftSave);
+            if (id === 'baseUrl') {
+                el.addEventListener('input', syncProviderSpecificFields);
+                el.addEventListener('change', syncProviderSpecificFields);
+            }
         });
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
@@ -1749,11 +2591,16 @@
         });
 
         renderEditPreview();
+        ensureKeyProfiles();
+        renderKeyProfiles();
         updateModelOptions(['{{ default_model }}']);
         syncModelDisplays();
-        setInterfaceMode('native');
         setupUnifiedWorkflowPanel();
-        refreshGptSession();
+        syncResponseFormatControl(false);
+        setWorkflowUpscale('', false);
+        syncProviderSpecificFields();
+        syncWorkflowSizeDisplay();
+        refreshImageSession();
     </script>
 </body>
 </html>

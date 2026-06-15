@@ -53,13 +53,14 @@ GEMINI_RESPONSE_MODALITIES = [
 SESSION_COOKIE_NAME = "gemini_session_id"
 SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 天
 VIDEO_SESSION_COOKIE_NAME = "video_tool_session_id"
+IMAGE_SESSION_COOKIE_NAME = "image_session_id"
 DEFAULT_VIDEO_BASE_URL = os.getenv("DEFAULT_VIDEO_BASE_URL", DEFAULT_BASE_URL)
 DEFAULT_VIDEO_MODEL = os.getenv("DEFAULT_VIDEO_MODEL", "grok-imagine-1.0-video")
 DEFAULT_GPT_IMAGE_BASE_URL = os.getenv("DEFAULT_GPT_IMAGE_BASE_URL", DEFAULT_BASE_URL)
 DEFAULT_GPT_IMAGE_MODEL = os.getenv("DEFAULT_GPT_IMAGE_MODEL", "gpt-image-2-flatfee")
 DEFAULT_REQUEST_TIMEOUT = int(os.getenv("DEFAULT_REQUEST_TIMEOUT", "60"))
-ENABLE_IMAGE_TIMEOUT_FALLBACK = os.getenv("ENABLE_IMAGE_TIMEOUT_FALLBACK", "false").lower() not in {"0", "false", "no"}
 GEMINI_OUTPUT_SUBDIR = "gemini"
+IMAGE_SESSION_SUBDIR = "image"
 GPT_IMAGE_OUTPUT_SUBDIR = "gpt"
 GPT_IMAGE_SESSION_SUBDIR = "gpt"
 GPT_IMAGE_SESSION_COOKIE_NAME = "gpt_image_session_id"
@@ -77,6 +78,8 @@ gemini_tasks = {}
 gemini_task_lock = threading.Lock()
 gpt_image_tasks = {}
 gpt_image_task_lock = threading.Lock()
+image_tasks = {}
+image_task_lock = threading.Lock()
 
 
 def get_session_id():
@@ -246,6 +249,230 @@ def get_gpt_image_task(task_id):
     with gpt_image_task_lock:
         task = gpt_image_tasks.get(task_id)
         return dict(task) if task else None
+
+
+def create_image_task(session_id, mode, payload):
+    task_id = str(uuid.uuid4())
+    now = utc_now_iso()
+    task = {
+        'task_id': task_id,
+        'session_id': session_id,
+        'mode': mode,
+        'provider': '',
+        'status': 'queued',
+        'success': False,
+        'message': 'Task queued',
+        'created_at': now,
+        'updated_at': now,
+        'result': None,
+        'error': None,
+    }
+    with image_task_lock:
+        image_tasks[task_id] = task
+
+    worker = threading.Thread(
+        target=run_image_task,
+        args=(task_id, session_id, mode, copy.deepcopy(payload)),
+        daemon=True,
+    )
+    worker.start()
+    return task
+
+
+def update_image_task(task_id, **updates):
+    updates['updated_at'] = utc_now_iso()
+    with image_task_lock:
+        task = image_tasks.get(task_id)
+        if not task:
+            return None
+        task.update(updates)
+        return dict(task)
+
+
+def get_image_task(task_id):
+    with image_task_lock:
+        task = image_tasks.get(task_id)
+        return dict(task) if task else None
+
+
+def normalize_unified_base_size(base_size, resolved_size=''):
+    value = (base_size or '').strip()
+    if value in {'1024x1024', '2048x2048', '3840x2160'}:
+        return value
+    dims = parse_image_size(resolved_size)
+    if not dims:
+        return '1024x1024'
+    max_edge = max(dims)
+    if max_edge >= 3000:
+        return '3840x2160'
+    if max_edge >= 1800:
+        return '2048x2048'
+    return '1024x1024'
+
+
+def map_unified_base_size_to_gemini_resolution(base_size):
+    mapping = {
+        '1024x1024': '1K',
+        '2048x2048': '2K',
+        '3840x2160': '4K',
+    }
+    return mapping.get(normalize_unified_base_size(base_size), '1K')
+
+
+def build_data_url_from_bytes(content, filename):
+    mime_type = get_image_mime_type(filename or 'reference.png')
+    encoded = base64.b64encode(content).decode('utf-8')
+    return f'data:{mime_type};base64,{encoded}'
+
+
+def run_unified_gpt_image_task(session_id, mode, payload):
+    data = dict(payload.get('data') or {})
+    effective_auth = build_effective_auth(data)
+    data['api_key'] = effective_auth['api_key']
+    data['base_url'] = effective_auth['base_url'] or data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL
+    cookie_header = f'{GPT_IMAGE_SESSION_COOKIE_NAME}={session_id}'
+    if mode == 'generate':
+        with app.test_request_context(
+            '/api/gpt-image/generate',
+            method='POST',
+            json=data,
+            headers={'Cookie': cookie_header},
+            base_url=payload.get('origin') or None,
+        ):
+            return normalize_flask_result(gpt_image_generate())
+
+    multipart_data = dict(data)
+    has_reference_files = any((item.get('field_name') or '').startswith('image') for item in payload.get('files') or [])
+    if str(multipart_data.get('use_last_image') or '').lower() == 'true' and not has_reference_files:
+        last_image_path = find_reusable_image_path_for_unified_session(session_id)
+        if not last_image_path:
+            return 400, {'success': False, 'message': 'No reusable image found in the current unified image session'}
+        with Path(last_image_path).open('rb') as f:
+            image_bytes = f.read()
+        payload.setdefault('files', []).append({
+            'field_name': 'image',
+            'filename': Path(last_image_path).name,
+            'content': image_bytes,
+            'mimetype': get_image_mime_type(last_image_path),
+        })
+        multipart_data['use_last_image'] = 'false'
+
+    for item in payload.get('files') or []:
+        field_name = item.get('field_name') or 'image[]'
+        current = multipart_data.get(field_name)
+        file_tuple = (BytesIO(item['content']), item.get('filename') or 'reference.jpg')
+        if current is None:
+            multipart_data[field_name] = [file_tuple]
+        elif isinstance(current, list):
+            current.append(file_tuple)
+        else:
+            multipart_data[field_name] = [current, file_tuple]
+
+    with app.test_request_context(
+        '/api/gpt-image/edit',
+        method='POST',
+        data=multipart_data,
+        content_type='multipart/form-data',
+        headers={'Cookie': cookie_header},
+        base_url=payload.get('origin') or None,
+    ):
+        return normalize_flask_result(gpt_image_edit())
+
+
+def run_unified_gemini_image_task(session_id, mode, payload):
+    data = dict(payload.get('data') or {})
+    effective_auth = build_effective_auth(data)
+    data['api_key'] = effective_auth['api_key']
+    data['base_url'] = effective_auth['base_url'] or data.get('base_url') or DEFAULT_BASE_URL
+    aspect_ratio_raw = (data.get('aspect_ratio') or '').strip()
+    aspect_ratio = normalize_gemini_aspect_ratio(aspect_ratio_raw)
+    if aspect_ratio_raw and not aspect_ratio:
+        return 400, {'success': False, 'message': f'Gemini provider does not support aspect ratio `{aspect_ratio_raw}`'}
+
+    base_size = normalize_unified_base_size(data.get('base_size') or data.get('size_base'), data.get('size') or '')
+    request_payload = {
+        'api_key': data.get('api_key', ''),
+        'base_url': data.get('base_url', DEFAULT_BASE_URL),
+        'model_id': data.get('model') or data.get('model_id') or DEFAULT_MODEL,
+        'prompt': data.get('prompt', ''),
+        'negative_prompt': data.get('negative_prompt', ''),
+        'image_count': int(data.get('image_count', 1) or 1),
+        'resolution': map_unified_base_size_to_gemini_resolution(base_size),
+        'aspect_ratio': aspect_ratio or '',
+    }
+    cookie_header = f'{SESSION_COOKIE_NAME}={session_id}'
+
+    if mode == 'generate':
+        with app.test_request_context('/api/text-to-image', method='POST', json=request_payload, headers={'Cookie': cookie_header}):
+            return normalize_flask_result(text_to_image())
+
+    image_data_list = []
+    for item in payload.get('files') or []:
+        if not (item.get('field_name') or '').startswith('image'):
+            continue
+        image_data_list.append(build_data_url_from_bytes(item['content'], item.get('filename') or 'reference.png'))
+
+    if str(data.get('use_last_image') or '').lower() == 'true' and not image_data_list:
+        last_image_path = find_reusable_image_path_for_unified_session(session_id)
+        if not last_image_path:
+            return 400, {'success': False, 'message': 'No reusable image found in the current unified image session'}
+        with Path(last_image_path).open('rb') as f:
+            image_data_list.append(build_data_url_from_bytes(f.read(), Path(last_image_path).name))
+
+    request_payload['image_data_list'] = image_data_list
+    with app.test_request_context('/api/image-to-image', method='POST', json=request_payload, headers={'Cookie': cookie_header}):
+        return normalize_flask_result(image_to_image())
+
+
+def run_image_task(task_id, session_id, mode, payload):
+    update_image_task(task_id, status='running', message='Task running')
+    data = payload.get('data') or {}
+    model_name = data.get('model') or data.get('model_id') or ''
+    provider = resolve_image_provider(model_name, data.get('base_url') or '')
+    effective_auth = build_effective_auth(data)
+    prompt = (data.get('prompt') or '').strip()
+    if not provider:
+        update_image_task(
+            task_id,
+            provider='',
+            status='failed',
+            success=False,
+            message=f'Unable to resolve image provider from model `{model_name}`',
+            error={'success': False, 'message': f'Unable to resolve image provider from model `{model_name}`'},
+            finished_at=utc_now_iso(),
+        )
+        return
+
+    try:
+        if provider == 'gpt':
+            status_code, result = run_unified_gpt_image_task(session_id, mode, payload)
+        else:
+            status_code, result = run_unified_gemini_image_task(session_id, mode, payload)
+
+        success = bool(result.get('success')) and status_code < 400
+        if success:
+            sync_image_session_from_result(session_id, provider, mode, prompt, result)
+        update_image_task(
+            task_id,
+            provider=provider,
+            status='succeeded' if success else 'failed',
+            success=success,
+            message=result.get('message') or result.get('error') or ('Task completed' if success else 'Task failed'),
+            result=result if success else None,
+            error=None if success else result,
+            finished_at=utc_now_iso(),
+        )
+    except Exception as exc:
+        logging.exception('Unified image async task failed: %s', task_id)
+        update_image_task(
+            task_id,
+            provider=provider,
+            status='failed',
+            success=False,
+            message=f'Error: {exc}',
+            error={'success': False, 'message': str(exc)},
+            finished_at=utc_now_iso(),
+        )
 
 
 def run_gpt_image_task(task_id, session_id, mode, payload):
@@ -521,6 +748,8 @@ IMAGE_SIZE_PRESETS = {
     },
     '1K': {
         '1:1': (1024, 1024),
+        '2:3': (768, 1152),
+        '3:2': (1152, 768),
         '16:9': (1280, 720),
         '9:16': (720, 1280),
         '4:3': (1024, 768),
@@ -528,6 +757,8 @@ IMAGE_SIZE_PRESETS = {
     },
     '2K': {
         '1:1': (2048, 2048),
+        '2:3': (1456, 2176),
+        '3:2': (2176, 1456),
         '16:9': (2048, 1152),
         '9:16': (1152, 2048),
         '4:3': (2048, 1536),
@@ -535,6 +766,29 @@ IMAGE_SIZE_PRESETS = {
     },
     '4K': {
         '1:1': (2048, 2048),
+        '2:3': (2176, 3264),
+        '3:2': (3264, 2176),
+        '16:9': (3840, 2160),
+        '9:16': (2160, 3840),
+        '4:3': (3264, 2448),
+        '3:4': (2448, 3264),
+    },
+}
+
+GPT_UPSCALE_SIZE_PRESETS = {
+    '2K': {
+        '1:1': (2048, 2048),
+        '2:3': (1456, 2176),
+        '3:2': (2176, 1456),
+        '16:9': (1920, 1088),
+        '9:16': (1088, 1920),
+        '4:3': (2048, 1536),
+        '3:4': (1536, 2048),
+    },
+    '4K': {
+        '1:1': (2880, 2880),
+        '2:3': (2176, 3264),
+        '3:2': (3264, 2176),
         '16:9': (3840, 2160),
         '9:16': (2160, 3840),
         '4:3': (3264, 2448),
@@ -589,25 +843,11 @@ def build_gemini_payload(parts, image_size=None, aspect_ratio=None):
     }
 
 
-def get_gpt_timeout_fallback_size(size, aspect_ratio):
-    if not ENABLE_IMAGE_TIMEOUT_FALLBACK:
-        return None
-    fallback_dimensions = get_target_dimensions('1K', aspect_ratio)
-    if not fallback_dimensions:
-        return None
-    fallback_size = f'{fallback_dimensions[0]}x{fallback_dimensions[1]}'
-    return fallback_size if fallback_size != size else None
-
-
 def parse_image_size(size):
     match = re.fullmatch(r'(\d+)x(\d+)', (size or '').strip())
     if not match:
         return None
     return int(match.group(1)), int(match.group(2))
-
-
-def should_retry_gemini_at_1k(image_size):
-    return ENABLE_IMAGE_TIMEOUT_FALLBACK and image_size in {'2K', '4K'}
 
 
 def resize_image_to_target(image, target_size):
@@ -646,35 +886,27 @@ def summarize_html_error(text):
     return stripped[:200]
 
 
-def make_upstream_error_payload(response, service_name='Upstream'):
-    detail = summarize_upstream_error(response)
-    status_code = response.status_code
-    if status_code == 524:
-        message = (
-            f'{service_name} returned Cloudflare 524 timeout. '
-            '2K/4K image generation is taking longer than the proxy allows.'
-        )
-    elif status_code in {401, 403}:
-        message = f'{service_name} authentication failed. Check the API key.'
-    elif status_code == 413:
-        message = f'{service_name} rejected the request as too large.'
-    elif status_code in {502, 504}:
-        message = f'{service_name} gateway timeout or temporary upstream failure (HTTP {status_code}).'
-    elif status_code == 500:
-        message = f'{service_name} server error (HTTP 500).'
-    else:
-        message = f'{service_name} request failed (HTTP {status_code}).'
-    return {
-        'success': False,
-        'message': message,
-        'status_code': status_code,
-        'detail': detail,
-    }
-
-
-def forward_gemini_error_response(response):
-    payload = make_upstream_error_payload(response, 'Gemini upstream')
-    return jsonify(payload), response.status_code
+def forward_raw_upstream_error(response):
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            payload = dict(payload)
+            payload.setdefault('success', False)
+            if not payload.get('message'):
+                payload['message'] = response.text[:500] or f'HTTP {response.status_code}'
+            return jsonify(payload), response.status_code
+        return jsonify({
+            'success': False,
+            'message': response.text[:500] or f'HTTP {response.status_code}',
+            'detail': payload,
+        }), response.status_code
+    except Exception:
+        text = response.text or ''
+        return jsonify({
+            'success': False,
+            'message': text[:500] or f'HTTP {response.status_code}',
+            'detail': text[:2000] or '',
+        }), response.status_code
 
 
 def iter_gemini_auth_headers(api_key):
@@ -725,20 +957,9 @@ def send_gemini_request(method, url, api_key, **kwargs):
     raise requests.RequestException('Gemini request failed without a response')
 
 
-def post_gemini_with_timeout_fallback(url, payload, api_key, requested_size):
+def post_gemini_request(url, payload, api_key):
     headers = {"Content-Type": "application/json"}
-    response = send_gemini_request('POST', url, api_key, json=payload, headers=headers, timeout=API_TIMEOUT)
-    if response.status_code != 524 or not should_retry_gemini_at_1k(requested_size):
-        return response, False
-
-    logging.warning('[524] Gemini upstream timed out at %s; retrying at 1K fallback', requested_size)
-    fallback_payload = copy.deepcopy(payload)
-    image_config = fallback_payload.get('generationConfig', {}).get('imageConfig')
-    if not isinstance(image_config, dict):
-        return response, False
-    image_config['imageSize'] = '1K'
-    fallback_response = send_gemini_request('POST', url, api_key, json=fallback_payload, headers=headers, timeout=API_TIMEOUT)
-    return fallback_response, fallback_response.status_code < 400
+    return send_gemini_request('POST', url, api_key, json=payload, headers=headers, timeout=API_TIMEOUT)
 
 
 
@@ -766,6 +987,70 @@ def set_video_session_cookie(response, session_id):
         samesite='Lax'
     )
     return response
+
+
+def get_image_session_id():
+    session_id = request.cookies.get(IMAGE_SESSION_COOKIE_NAME)
+    if session_id:
+        try:
+            uuid.UUID(session_id)
+            return session_id
+        except ValueError:
+            pass
+    return str(uuid.uuid4())
+
+
+def set_image_session_cookie(response, session_id):
+    response.set_cookie(
+        IMAGE_SESSION_COOKIE_NAME,
+        session_id,
+        max_age=SESSION_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
+
+
+def get_image_session_dir(session_id):
+    session_dir = Path(OUTPUT_DIR) / IMAGE_SESSION_SUBDIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
+
+
+def get_image_session_state_path(session_id):
+    state_dir = Path(SESSIONS_DIR) / IMAGE_SESSION_SUBDIR
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir / f'{session_id}.json'
+
+
+def load_image_session_state(session_id):
+    state_path = get_image_session_state_path(session_id)
+    if state_path.exists():
+        try:
+            with state_path.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except Exception as exc:
+            logging.warning(f'Failed to load image session state for {session_id}: {exc}')
+    return {
+        'provider': '',
+        'last_image': None,
+        'created_at': time.time(),
+        'last_accessed': time.time(),
+        'request_count': 0,
+        'last_prompt': '',
+        'last_mode': '',
+        'history': [],
+        'draft': {},
+    }
+
+
+def save_image_session_state(session_id, state):
+    state_path = get_image_session_state_path(session_id)
+    with file_lock:
+        with state_path.open('w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
 
 
 def get_gpt_session_id():
@@ -928,6 +1213,217 @@ def clear_gpt_session_data(session_id):
     session_dir.mkdir(parents=True, exist_ok=True)
 
 
+def resolve_local_image_path_from_url(image_url):
+    raw = (image_url or '').strip()
+    if not raw:
+        return None
+    path = raw.split('?', 1)[0]
+    if path.startswith('/output/gpt/'):
+        parts = path.split('/')
+        if len(parts) >= 5:
+            return Path(OUTPUT_DIR) / GPT_IMAGE_OUTPUT_SUBDIR / parts[3] / parts[4]
+    if path.startswith('/output/'):
+        parts = path.split('/')
+        if len(parts) >= 4:
+            session_id = parts[2]
+            filename = parts[3]
+            gemini_path = Path(OUTPUT_DIR) / GEMINI_OUTPUT_SUBDIR / session_id / filename
+            if gemini_path.exists():
+                return gemini_path
+            legacy_path = Path(OUTPUT_DIR) / session_id / filename
+            if legacy_path.exists():
+                return legacy_path
+            return gemini_path
+    return None
+
+
+def update_image_session_last_image(session_id, image_url, prompt='', mode='', provider='', image_path=None):
+    state = load_image_session_state(session_id)
+    resolved_path = Path(image_path) if image_path else resolve_local_image_path_from_url(image_url)
+    state['provider'] = provider
+    state['last_image'] = str(resolved_path) if resolved_path else None
+    state['last_image_url'] = image_url
+    state['last_prompt'] = prompt
+    state['last_mode'] = mode
+    state['last_accessed'] = time.time()
+    state['request_count'] = state.get('request_count', 0) + 1
+    save_image_session_state(session_id, state)
+
+
+def append_image_history(session_id, entry):
+    state = load_image_session_state(session_id)
+    history = state.get('history', [])
+    if not isinstance(history, list):
+        history = []
+    history.insert(0, entry)
+    state['history'] = history[:20]
+    state['last_accessed'] = time.time()
+    save_image_session_state(session_id, state)
+
+
+def build_image_session_payload(session_id):
+    state = load_image_session_state(session_id)
+    history = state.get('history', [])
+    return {
+        'success': True,
+        'session_id': session_id,
+        'provider': state.get('provider', ''),
+        'created_at': state.get('created_at'),
+        'request_count': state.get('request_count', 0),
+        'has_last_image': bool(state.get('last_image')) or bool(state.get('last_image_url')),
+        'last_prompt': state.get('last_prompt', ''),
+        'last_mode': state.get('last_mode', ''),
+        'history': history if isinstance(history, list) else [],
+        'draft': state.get('draft') or {},
+        'last_image_url': state.get('last_image_url') or '',
+    }
+
+
+def delete_image_history_image(session_id, image_url):
+    state = load_image_session_state(session_id)
+    image_name = Path((image_url or '').split('?', 1)[0]).name
+    if not image_name:
+        return False, 'Invalid image reference'
+
+    history = state.get('history', [])
+    if not isinstance(history, list):
+        history = []
+
+    removed = False
+    updated_history = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        images = entry.get('images')
+        if not isinstance(images, list):
+            updated_history.append(entry)
+            continue
+
+        remaining_images = []
+        for item in images:
+            if Path(str(item).split('?', 1)[0]).name == image_name:
+                removed = True
+                continue
+            remaining_images.append(item)
+        if remaining_images:
+            next_entry = dict(entry)
+            next_entry['images'] = remaining_images
+            updated_history.append(next_entry)
+
+    if not removed:
+        return False, 'Image not found in history'
+
+    target_path = resolve_local_image_path_from_url(image_url)
+    if target_path:
+        try:
+            target_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    state['history'] = updated_history[:20]
+    state['last_accessed'] = time.time()
+    if Path(str(state.get('last_image_url', '')).split('?', 1)[0]).name == image_name:
+        state['last_image'] = None
+        state['last_image_url'] = ''
+    save_image_session_state(session_id, state)
+    return True, None
+
+
+def clear_image_session_data(session_id):
+    state = load_image_session_state(session_id)
+    preserved_draft = state.get('draft') if isinstance(state.get('draft'), dict) else {}
+
+    state.update({
+        'last_image': None,
+        'last_image_url': '',
+        'last_prompt': '',
+        'last_mode': '',
+        'history': [],
+        'request_count': 0,
+        'last_accessed': time.time(),
+        'draft': preserved_draft,
+    })
+    save_image_session_state(session_id, state)
+
+    image_dir = get_image_session_dir(session_id)
+    if image_dir.exists():
+        shutil.rmtree(image_dir)
+    image_dir.mkdir(parents=True, exist_ok=True)
+
+    gemini_state_path = get_session_state_path(session_id)
+    if gemini_state_path.exists():
+        gemini_state_path.unlink()
+    gemini_output_dir = get_session_dir(session_id)
+    if gemini_output_dir.exists():
+        shutil.rmtree(gemini_output_dir)
+    gemini_output_dir.mkdir(parents=True, exist_ok=True)
+
+    gpt_state_path = get_gpt_session_state_path(session_id)
+    if gpt_state_path.exists():
+        gpt_state_path.unlink()
+    gpt_output_dir = get_gpt_session_dir(session_id)
+    if gpt_output_dir.exists():
+        shutil.rmtree(gpt_output_dir)
+    gpt_output_dir.mkdir(parents=True, exist_ok=True)
+
+
+def find_reusable_image_path_for_unified_session(session_id):
+    state = load_image_session_state(session_id)
+
+    candidates = []
+    if state.get('last_image'):
+        candidates.append(Path(str(state['last_image'])))
+
+    if state.get('last_image_url'):
+        resolved = resolve_local_image_path_from_url(state.get('last_image_url'))
+        if resolved:
+            candidates.append(resolved)
+
+    history = state.get('history', [])
+    if isinstance(history, list):
+        for entry in history:
+            if not isinstance(entry, dict):
+                continue
+            images = entry.get('images')
+            if not isinstance(images, list):
+                continue
+            for item in images:
+                resolved = resolve_local_image_path_from_url(item)
+                if resolved:
+                    candidates.append(resolved)
+
+    for candidate in candidates:
+        try:
+            if candidate and Path(candidate).exists():
+                return Path(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def sync_image_session_from_result(session_id, provider, mode, prompt, result):
+    images = result.get('images') if isinstance(result, dict) else None
+    if not isinstance(images, list) or not images:
+        return
+    first_url = images[0]
+    first_path = resolve_local_image_path_from_url(first_url)
+    update_image_session_last_image(
+        session_id,
+        first_url,
+        prompt=prompt,
+        mode=mode,
+        provider=provider,
+        image_path=first_path,
+    )
+    append_image_history(session_id, {
+        'created_at': utc_now_iso(),
+        'provider': provider,
+        'mode': mode,
+        'prompt': prompt,
+        'images': images,
+    })
+
+
 def download_image_to_session(image_url, output_path):
     response = requests.get(image_url, timeout=DEFAULT_REQUEST_TIMEOUT)
     response.raise_for_status()
@@ -1018,16 +1514,9 @@ def send_gpt_request(method, url, api_key, **kwargs):
     raise requests.RequestException('GPT image request failed without a response')
 
 
-def get_gpt_interface_mode(payload, default='native'):
-    mode = ''
-    if isinstance(payload, dict):
-        mode = (payload.get('interface_mode') or default).strip().lower()
-    return mode if mode in {'native', 'compatible'} else default
-
-
 def normalize_gpt_image_quality(quality):
-    value = (quality or 'auto').strip().lower()
-    return value if value in {'auto', 'low', 'medium', 'high'} else 'auto'
+    value = (quality or 'high').strip().lower()
+    return value if value in {'auto', 'low', 'medium', 'high'} else 'high'
 
 
 def normalize_gpt_image_size(size):
@@ -1071,7 +1560,109 @@ def normalize_gpt_image_size(size):
 
 def normalize_gpt_aspect_ratio(aspect_ratio):
     value = (aspect_ratio or '1:1').strip()
-    return value if value in {'1:1', '16:9', '9:16', '4:3', '3:4'} else '1:1'
+    return value if value in {'1:1', '2:3', '3:2', '16:9', '9:16', '4:3', '3:4'} else '1:1'
+
+
+def normalize_gpt_image_style(style):
+    value = (style or '').strip().lower()
+    return value if value in {'natural', 'vivid'} else ''
+
+
+def normalize_gpt_background(background):
+    value = (background or 'auto').strip().lower()
+    return value if value in {'auto', 'opaque', 'transparent'} else 'auto'
+
+
+def normalize_gpt_response_format(response_format):
+    value = (response_format or 'b64_json').strip().lower()
+    return value if value in {'url', 'b64_json'} else 'b64_json'
+
+
+def normalize_gpt_upscale(upscale):
+    value = (upscale or '').strip().lower()
+    return value if value in {'2k', '4k'} else ''
+
+
+def get_gpt_upscale_target(upscale, aspect_ratio):
+    label = {'2k': '2K', '4k': '4K'}.get(normalize_gpt_upscale(upscale))
+    if not label:
+        return None
+    return GPT_UPSCALE_SIZE_PRESETS.get(label, {}).get(aspect_ratio)
+
+
+def choose_larger_target_size(*targets):
+    valid_targets = [item for item in targets if item and len(item) == 2]
+    if not valid_targets:
+        return None
+    return max(valid_targets, key=lambda item: item[0] * item[1])
+
+
+def resolve_image_provider(model_name, base_url=''):
+    model_value = (model_name or '').strip().lower()
+    base_url_value = (base_url or '').strip().lower()
+    if 'gemini' in model_value:
+        return 'gemini'
+    if 'gpt' in model_value or 'openai' in model_value:
+        return 'gpt'
+    if 'googleapis' in base_url_value or '/v1beta/models' in base_url_value:
+        return 'gemini'
+    if 'openai' in base_url_value or '/v1/images' in base_url_value or '/v1/models' in base_url_value:
+        return 'gpt'
+    return ''
+
+
+def normalize_key_profiles(payload):
+    profiles = payload.get('key_profiles') if isinstance(payload, dict) else None
+    if isinstance(profiles, str):
+        try:
+            profiles = json.loads(profiles)
+        except Exception:
+            profiles = None
+    if not isinstance(profiles, list):
+        return []
+    normalized = []
+    for index, item in enumerate(profiles, start=1):
+        if not isinstance(item, dict):
+            continue
+        api_key = (item.get('api_key') or '').strip()
+        base_url = (item.get('base_url') or '').strip()
+        if not api_key or not base_url:
+            continue
+        normalized.append({
+            'id': (item.get('id') or f'key_{index}').strip(),
+            'label': (item.get('label') or f'Key {index}').strip(),
+            'api_key': api_key,
+            'base_url': base_url.rstrip('/'),
+        })
+    return normalized
+
+
+def build_effective_auth(payload):
+    profiles = normalize_key_profiles(payload)
+    payload_model = (payload.get('model') or payload.get('model_id') or '').strip() if isinstance(payload, dict) else ''
+    model_key_map = payload.get('model_key_map') if isinstance(payload, dict) else {}
+    if isinstance(model_key_map, str):
+        try:
+            model_key_map = json.loads(model_key_map)
+        except Exception:
+            model_key_map = {}
+    if not isinstance(model_key_map, dict):
+        model_key_map = {}
+    selected_profile = None
+    if payload_model and model_key_map:
+        profile_id = (model_key_map.get(payload_model) or '').strip()
+        if profile_id:
+            selected_profile = next((item for item in profiles if item['id'] == profile_id), None)
+    if not selected_profile and profiles:
+        selected_profile = profiles[0]
+    return {
+        'api_key': (selected_profile or {}).get('api_key') or (payload.get('api_key') if isinstance(payload, dict) else '') or '',
+        'base_url': (selected_profile or {}).get('base_url') or (payload.get('base_url') if isinstance(payload, dict) else '') or '',
+        'profile_id': (selected_profile or {}).get('id') or '',
+        'profile_label': (selected_profile or {}).get('label') or '',
+        'profiles': profiles,
+        'model_key_map': model_key_map if isinstance(model_key_map, dict) else {},
+    }
 
 
 def apply_gpt_layout_instruction(prompt, size, aspect_ratio):
@@ -1094,6 +1685,13 @@ def get_uploaded_image_files(files):
     return [item for item in image_files if getattr(item, 'filename', '')]
 
 
+def get_uploaded_mask_file(files):
+    mask_file = files.get('mask')
+    if mask_file and getattr(mask_file, 'filename', ''):
+        return mask_file
+    return None
+
+
 def summarize_upstream_error(response):
     content_type = (response.headers.get('Content-Type') or '').lower()
     text = response.text or ''
@@ -1105,59 +1703,29 @@ def summarize_upstream_error(response):
         return text[:500]
 
 
-def build_gpt_compatible_text_payload(model, prompt):
-    return {
-        'stream': False,
-        'model': model,
-        'messages': [
-            {
-                'role': 'user',
-                'content': prompt,
-            }
-        ],
-    }
+def fetch_gemini_models(api_key, base_url):
+    url = f"{(base_url or DEFAULT_BASE_URL).rstrip('/')}/v1beta/models"
+    try:
+        response = send_gemini_request('GET', url, api_key, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        models = []
+        if isinstance(data, dict) and isinstance(data.get('models'), list):
+            for item in data['models']:
+                if not isinstance(item, dict):
+                    continue
+                model_id = (item.get('name') or '').strip()
+                if model_id.startswith('models/'):
+                    model_id = model_id[7:]
+                if model_id:
+                    models.append(model_id)
+        return sorted(dict.fromkeys(models)) if models else [DEFAULT_MODEL], None
+    except Exception as exc:
+        return [DEFAULT_MODEL], str(exc)
 
 
-def build_gpt_compatible_edit_payload(model, prompt, image_urls):
-    if isinstance(image_urls, str):
-        image_urls = [image_urls]
-    content = [{'type': 'text', 'text': prompt}]
-    for image_url in image_urls or []:
-        content.append({'type': 'image_url', 'image_url': {'url': image_url}})
-    return {
-        'stream': False,
-        'model': model,
-        'messages': [
-            {
-                'role': 'user',
-                'content': content,
-            }
-        ],
-    }
-
-
-def parse_gpt_compatible_image_urls(response_data):
-    choices = response_data.get('choices') if isinstance(response_data, dict) else None
-    if not isinstance(choices, list):
-        return []
-    urls = []
-    for choice in choices:
-        if not isinstance(choice, dict):
-            continue
-        message = choice.get('message') or {}
-        content = message.get('content')
-        if isinstance(content, str):
-            urls.extend(parse_markdown_image_urls(content))
-    return list(dict.fromkeys(urls))
-
-
-def fetch_gpt_models(api_key, base_url, interface_mode):
-    candidates = []
-    if interface_mode == 'compatible':
-        candidates = [('/v1/models', 'GET')]
-    else:
-        candidates = [('/v1/models', 'GET')]
-
+def fetch_gpt_models(api_key, base_url):
+    candidates = [('/v1/models', 'GET')]
     last_error = None
     for path, method in candidates:
         url = f'{base_url}{path}'
@@ -1498,31 +2066,16 @@ def fetch_video_models(api_key, base_url):
 
 
 def forward_error_response(response):
-    payload = make_upstream_error_payload(response, 'GPT image upstream')
-    return jsonify(payload), response.status_code
+    return forward_raw_upstream_error(response)
 
 
 @app.route('/')
 def index():
-    session_id = get_session_id()
     video_session_id = get_video_session_id()
-    gpt_session_id = get_gpt_session_id()
+    image_session_id = get_image_session_id()
     response = make_response(render_template('index.html'))
-    response = set_session_cookie(response, session_id)
     response = set_video_session_cookie(response, video_session_id)
-    return set_gpt_session_cookie(response, gpt_session_id)
-
-
-@app.route('/gemini-app')
-def gemini_app():
-    session_id = get_session_id()
-    response = make_response(render_template(
-        'gemini_app.html',
-        session_id=session_id,
-        default_base_url=DEFAULT_BASE_URL,
-        default_model=DEFAULT_MODEL,
-    ))
-    return set_session_cookie(response, session_id)
+    return set_image_session_cookie(response, image_session_id)
 
 
 @app.route('/grok-app')
@@ -1539,16 +2092,27 @@ def grok_app():
     return set_video_session_cookie(response, video_session_id)
 
 
-@app.route('/gpt-image-app')
-def gpt_image_app():
-    session_id = get_gpt_session_id()
+@app.route('/image-app')
+def image_app():
+    session_id = get_image_session_id()
     response = make_response(render_template(
-        'gpt_image_app.html',
+        'image_app.html',
         session_id=session_id,
         default_base_url=DEFAULT_GPT_IMAGE_BASE_URL,
         default_model=DEFAULT_GPT_IMAGE_MODEL,
+        api_prefix='/api/image',
+        test_endpoint='/api/image/test',
+        models_endpoint='/api/image/models',
+        workspace_title='统一图片工作区',
+        workspace_name='图片生成工作区',
+        workspace_data_label='图片数据',
+        session_results_hint='仅展示当前统一图片会话的本地图片结果。',
+        session_scope_text='当前浏览器会话会统一保存图片生成记录，根据模型名称自动匹配 GPT 或 Gemini。',
+        clear_confirm_text='确定要清空当前图片会话吗？这会删除本地结果和历史记录。',
+        clear_success_text='已清空当前图片会话',
+        file_name_prefix='image',
     ))
-    return set_gpt_session_cookie(response, session_id)
+    return set_image_session_cookie(response, session_id)
 
 
 @app.route('/output/<session_id>/<filename>')
@@ -1607,194 +2171,97 @@ def serve_video_output(session_id, filename):
     return send_from_directory(str(output_dir), filename)
 
 
-@app.route('/api/session', methods=['GET', 'POST'])
-def get_session_info():
-    """获取当前 Session 信息"""
-    session_id = get_session_id()
+@app.route('/api/image/session', methods=['GET', 'POST'])
+def get_image_session():
+    session_id = get_image_session_id()
 
     if request.method == 'POST':
         payload = request.get_json(silent=True) or {}
-        draft = save_gemini_draft(session_id, payload)
-        response = make_response(jsonify({
-            'success': True,
-            'session_id': session_id,
-            'draft': draft,
-        }))
-        return set_session_cookie(response, session_id)
-
-    response = make_response(jsonify(build_gemini_session_payload(session_id)))
-    return set_session_cookie(response, session_id)
-
-
-@app.route('/api/session/clear', methods=['POST'])
-def clear_session():
-    """Clear the current session state."""
-    session_id = get_session_id()
-
-    # 清除内存状态
-    with session_lock:
-        if session_id in session_states:
-            del session_states[session_id]
-
-    # 清除文件状态
-    state_path = get_session_state_path(session_id)
-    if state_path.exists():
-        try:
-            state_path.unlink()
-        except Exception as e:
-            logging.error(f"删除 Session 状态文件失败：{e}")
-
-    # 清除图片目录
-    session_dir = get_session_dir(session_id)
-    if session_dir.exists():
-        try:
-            shutil.rmtree(session_dir)
-        except Exception as e:
-            logging.error(f"Failed to remove session image directory: {e}")
-
-    # 生成新的 Session ID
-    new_session_id = str(uuid.uuid4())
-    response = make_response(jsonify({
-        'success': True,
-        'message': 'Session cleared',
-        'new_session_id': new_session_id
-    }))
-    return set_session_cookie(response, new_session_id)
-
-
-@app.route('/api/gemini-image/result', methods=['DELETE'])
-def delete_gemini_image_result():
-    session_id = get_session_id()
-    payload = request.get_json(silent=True) or {}
-    image_url = (payload.get('image_url') or '').strip()
-
-    if not image_url:
-        return jsonify({'success': False, 'message': '请提供要删除的图片'}), 400
-
-    success, error = delete_gemini_history_image(session_id, image_url)
-    if not success:
-        status_code = 404 if error == 'Image not found' or error == 'Image not found in history' else 400
-        return jsonify({'success': False, 'message': error}), status_code
-
-    response = jsonify({'success': True, 'message': '图片已删除', 'session': build_gemini_session_payload(session_id)})
-    return set_session_cookie(response, session_id)
-
-
-@app.route('/api/gemini-image/tasks', methods=['POST'])
-def create_gemini_image_task():
-    session_id = get_session_id()
-    data = request.get_json(silent=True) or {}
-    mode = (data.get('mode') or 'text').strip().lower()
-    payload = data.get('payload') if isinstance(data.get('payload'), dict) else data
-
-    if mode not in {'text', 'image'}:
-        return jsonify({'success': False, 'message': 'Invalid Gemini task mode'}), 400
-    if not payload.get('api_key'):
-        return jsonify({'success': False, 'message': '请填写 API Key'}), 400
-    if not payload.get('prompt'):
-        return jsonify({'success': False, 'message': '请填写提示词'}), 400
-    if mode == 'image' and not payload.get('image_data_list'):
-        return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
-
-    task = create_gemini_task(session_id, mode, payload)
-    response = jsonify({
-        'success': True,
-        'task_id': task['task_id'],
-        'status': 'queued',
-        'message': '任务已提交，后台正在生成。',
-    })
-    return set_session_cookie(response, session_id)
-
-
-@app.route('/api/gemini-image/tasks/<task_id>', methods=['GET'])
-def get_gemini_image_task(task_id):
-    task = get_gemini_task(task_id)
-    if not task:
-        return jsonify({'success': False, 'message': 'Task not found'}), 404
-    session_id = get_session_id()
-    if task.get('session_id') != session_id:
-        return jsonify({'success': False, 'message': 'Task not found'}), 404
-    task_payload = dict(task)
-    task_payload['task_success'] = bool(task_payload.pop('success', False))
-    return jsonify({'success': True, **task_payload})
-
-
-@app.route('/api/gpt-image/session', methods=['GET', 'POST'])
-def get_gpt_image_session():
-    session_id = get_gpt_session_id()
-
-    if request.method == 'POST':
-        payload = request.get_json(silent=True) or {}
-        state = load_gpt_session_state(session_id)
+        state = load_image_session_state(session_id)
         state['draft'] = {
             'api_key': payload.get('api_key', ''),
             'base_url': payload.get('base_url', DEFAULT_GPT_IMAGE_BASE_URL),
             'model': payload.get('model', DEFAULT_GPT_IMAGE_MODEL),
-            'interface_mode': get_gpt_interface_mode(payload),
+            'key_profiles': normalize_key_profiles(payload),
+            'model_key_map': payload.get('model_key_map', {}) if isinstance(payload.get('model_key_map'), dict) else {},
             'generate_prompt': payload.get('generate_prompt', ''),
+            'generate_negative_prompt': payload.get('generate_negative_prompt', ''),
             'generate_size': payload.get('generate_size', '1024x1024'),
             'generate_aspect_ratio': payload.get('generate_aspect_ratio', '1:1'),
             'generate_count': payload.get('generate_count', '1'),
-            'generate_quality': payload.get('generate_quality', 'auto'),
+            'generate_quality': payload.get('generate_quality', 'high'),
+            'generate_style': payload.get('generate_style', 'natural'),
+            'generate_background': payload.get('generate_background', 'auto'),
+            'generate_response_format': payload.get('generate_response_format', 'b64_json'),
+            'generate_upscale': payload.get('generate_upscale', ''),
             'edit_prompt': payload.get('edit_prompt', ''),
+            'edit_negative_prompt': payload.get('edit_negative_prompt', ''),
             'edit_size': payload.get('edit_size', '1024x1024'),
             'edit_aspect_ratio': payload.get('edit_aspect_ratio', '1:1'),
             'edit_count': payload.get('edit_count', '1'),
-            'edit_quality': payload.get('edit_quality', 'auto'),
+            'edit_quality': payload.get('edit_quality', 'high'),
+            'edit_style': payload.get('edit_style', 'natural'),
+            'edit_background': payload.get('edit_background', 'auto'),
+            'edit_response_format': payload.get('edit_response_format', 'b64_json'),
+            'edit_upscale': payload.get('edit_upscale', ''),
             'use_last_image': bool(payload.get('use_last_image', False)),
             'edit_references': payload.get('edit_references', [])[:4],
             'updated_at': utc_now_iso(),
         }
         state['last_accessed'] = time.time()
-        save_gpt_session_state(session_id, state)
-        response = jsonify({'success': True, **build_gpt_session_payload(session_id)})
-        return set_gpt_session_cookie(response, session_id)
+        save_image_session_state(session_id, state)
+        response = jsonify(build_image_session_payload(session_id))
+        return set_image_session_cookie(response, session_id)
 
-    response = jsonify({'success': True, **build_gpt_session_payload(session_id)})
-    return set_gpt_session_cookie(response, session_id)
+    response = jsonify(build_image_session_payload(session_id))
+    return set_image_session_cookie(response, session_id)
 
 
-@app.route('/api/gpt-image/session/clear', methods=['POST'])
-def clear_gpt_image_session():
-    session_id = get_gpt_session_id()
-    clear_gpt_session_data(session_id)
-    new_session_id = str(uuid.uuid4())
+@app.route('/api/image/session/clear', methods=['POST'])
+def clear_image_session():
+    session_id = get_image_session_id()
+    clear_image_session_data(session_id)
     response = jsonify({
         'success': True,
-        'message': 'GPT image session cleared',
-        'new_session_id': new_session_id,
+        'message': '当前图片历史已清空',
+        'session': build_image_session_payload(session_id),
     })
-    return set_gpt_session_cookie(response, new_session_id)
+    return set_image_session_cookie(response, session_id)
 
 
-@app.route('/api/gpt-image/result', methods=['DELETE'])
-def delete_gpt_image_result():
-    session_id = get_gpt_session_id()
+@app.route('/api/image/result', methods=['DELETE'])
+def delete_image_result():
+    session_id = get_image_session_id()
     payload = request.get_json(silent=True) or {}
     image_url = (payload.get('image_url') or '').strip()
-
     if not image_url:
         return jsonify({'success': False, 'message': '请提供要删除的图片'}), 400
 
-    success, error = delete_gpt_history_image(session_id, image_url)
+    success, error = delete_image_history_image(session_id, image_url)
     if not success:
-        status_code = 404 if error == 'Image not found' or error == 'Image not found in history' else 400
+        status_code = 404 if error == 'Image not found in history' else 400
         return jsonify({'success': False, 'message': error}), status_code
 
-    response = jsonify({'success': True, 'message': '图片已删除', 'session': build_gpt_session_payload(session_id)})
-    return set_gpt_session_cookie(response, session_id)
+    response = jsonify({
+        'success': True,
+        'message': '图片已删除',
+        'session': build_image_session_payload(session_id),
+    })
+    return set_image_session_cookie(response, session_id)
 
 
-@app.route('/api/gpt-image/tasks', methods=['POST'])
-def create_gpt_image_task_endpoint():
-    session_id = get_gpt_session_id()
+@app.route('/api/image/tasks', methods=['POST'])
+def create_image_task_endpoint():
+    session_id = get_image_session_id()
     if request.content_type and request.content_type.startswith('multipart/form-data'):
         mode = (request.form.get('mode') or 'edit').strip().lower()
         payload = {'data': request.form.to_dict(), 'files': [], 'origin': request.host_url}
-        for uploaded_file in get_uploaded_image_files(request.files):
+        for field_name, uploaded_file in request.files.items(multi=True):
             payload['files'].append({
-                'filename': uploaded_file.filename or 'reference.jpg',
+                'field_name': field_name,
+                'filename': uploaded_file.filename or 'reference.png',
                 'content': uploaded_file.read(),
+                'mimetype': getattr(uploaded_file, 'mimetype', None),
             })
     else:
         body = request.get_json(silent=True) or {}
@@ -1803,135 +2270,156 @@ def create_gpt_image_task_endpoint():
         payload = {'data': payload_data or {}, 'files': [], 'origin': request.host_url}
 
     if mode not in {'generate', 'edit'}:
-        return jsonify({'success': False, 'message': 'Invalid GPT image task mode'}), 400
+        return jsonify({'success': False, 'message': 'Invalid image task mode'}), 400
+
     data = payload.get('data') or {}
-    if not data.get('api_key'):
+    model_name = (data.get('model') or data.get('model_id') or '').strip()
+    provider = resolve_image_provider(model_name, data.get('base_url') or '')
+    effective_auth = build_effective_auth(data)
+    if not provider:
+        return jsonify({'success': False, 'message': f'无法根据模型名识别 provider：{model_name}'}), 400
+    if not effective_auth['api_key']:
         return jsonify({'success': False, 'message': '请填写 API Key'}), 400
+    if not model_name:
+        return jsonify({'success': False, 'message': '请填写模型 ID'}), 400
     if not data.get('prompt'):
         return jsonify({'success': False, 'message': '请填写提示词'}), 400
     if mode == 'edit':
         use_last = str(data.get('use_last_image') or '').lower() == 'true'
-        if not use_last and not payload.get('files'):
+        has_reference_files = any((item.get('field_name') or '').startswith('image') for item in payload.get('files') or [])
+        if not use_last and not has_reference_files:
             return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
 
-    task = create_gpt_image_task(session_id, mode, payload)
+    task = create_image_task(session_id, mode, payload)
     response = jsonify({
         'success': True,
         'task_id': task['task_id'],
+        'provider': provider,
         'status': 'queued',
         'message': '任务已提交，后台正在生成。',
     })
-    return set_gpt_session_cookie(response, session_id)
+    return set_image_session_cookie(response, session_id)
 
 
-@app.route('/api/gpt-image/tasks/<task_id>', methods=['GET'])
-def get_gpt_image_task_endpoint(task_id):
-    task = get_gpt_image_task(task_id)
+@app.route('/api/image/tasks/<task_id>', methods=['GET'])
+def get_image_task_endpoint(task_id):
+    task = get_image_task(task_id)
     if not task:
         return jsonify({'success': False, 'message': 'Task not found'}), 404
-    session_id = get_gpt_session_id()
+    session_id = get_image_session_id()
     if task.get('session_id') != session_id:
         return jsonify({'success': False, 'message': 'Task not found'}), 404
     task_payload = dict(task)
     task_payload['task_success'] = bool(task_payload.pop('success', False))
-    return jsonify({'success': True, **task_payload})
+    response = jsonify({'success': True, **task_payload})
+    return set_image_session_cookie(response, session_id)
 
 
-@app.route('/api/models', methods=['POST'])
-def get_models():
-    """获取模型列表"""
-    data = request.json
-    api_key = data.get('api_key', '')
-    base_url = data.get('base_url', DEFAULT_BASE_URL)
-    
-    if not api_key:
-        return jsonify({'error': '请填写 API Key'})
-    
-    try:
-        url = f"{base_url.rstrip('/')}/v1beta/models"
-        response = send_gemini_request('GET', url, api_key, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        models = []
-        if "models" in data:
-            for m in data["models"]:
-                model_id = m.get("name", "")
-                if model_id.startswith("models/"):
-                    model_id = model_id[7:]
-                if model_id:
-                    models.append(model_id)
-        return jsonify({'models': models if models else [DEFAULT_MODEL]})
-    except Exception as e:
-        return jsonify({'error': str(e), 'models': [DEFAULT_MODEL]})
+@app.route('/api/image/models', methods=['POST'])
+def list_image_models():
+    data = request.get_json(silent=True) or {}
+    profiles = normalize_key_profiles(data)
+    if not profiles:
+        api_key = (data.get('api_key') or '').strip()
+        base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
+        if api_key and base_url:
+            profiles = [{
+                'id': 'key_1',
+                'label': 'Key 1',
+                'api_key': api_key,
+                'base_url': base_url,
+            }]
+    if not profiles:
+        return jsonify({'success': False, 'message': '请至少配置 1 组 API Key 与 Base URL'}), 400
+
+    merged_models = []
+    model_key_map = {}
+    errors = {}
+
+    for profile in profiles:
+        profile_errors = {}
+        gpt_models, gpt_error = fetch_gpt_models(profile['api_key'], profile['base_url'])
+        if gpt_error is None:
+            for model in gpt_models:
+                if not model:
+                    continue
+                merged_models.append(model)
+                model_key_map.setdefault(model, profile['id'])
+        else:
+            profile_errors['gpt'] = gpt_error
+
+        gemini_models, gemini_error = fetch_gemini_models(profile['api_key'], profile['base_url'])
+        if gemini_error is None:
+            for model in gemini_models:
+                if not model:
+                    continue
+                merged_models.append(model)
+                model_key_map.setdefault(model, profile['id'])
+        else:
+            profile_errors['gemini'] = gemini_error
+
+        if profile_errors:
+            errors[profile['id']] = profile_errors
+
+    models = sorted(dict.fromkeys([item for item in merged_models if item]))
+    if not models:
+        return jsonify({
+            'success': False,
+            'message': '获取模型列表失败',
+            'errors': errors,
+        }), 502
+
+    return jsonify({
+        'success': True,
+        'models': models,
+        'model_key_map': model_key_map,
+        'profiles': [{'id': item['id'], 'label': item['label'], 'base_url': item['base_url']} for item in profiles],
+        'partial': bool(errors),
+        'errors': errors,
+    })
 
 
-@app.route('/api/test', methods=['POST'])
-def test_connection():
-    """测试连接"""
-    data = request.json
-    api_key = data.get('api_key', '')
-    base_url = data.get('base_url', DEFAULT_BASE_URL)
-
-    if not api_key:
-        return jsonify({'success': False, 'message': '请填写 API Key'})
-
-    try:
-        url = f"{base_url.rstrip('/')}/v1beta/models"
-        response = send_gemini_request('GET', url, api_key, timeout=10)
-        if response.status_code == 200:
-            return jsonify({'success': True, 'message': f'Connection successful: {base_url}'})
-        return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-
-@app.route('/api/gpt-image/models', methods=['POST'])
-def list_gpt_image_models():
+@app.route('/api/image/test', methods=['POST'])
+def test_image_connection():
     data = request.get_json(silent=True) or {}
     api_key = (data.get('api_key') or '').strip()
     base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
-    interface_mode = get_gpt_interface_mode(data)
-
+    model_name = (data.get('model') or '').strip()
     if not api_key:
         return jsonify({'success': False, 'message': '请填写 API Key'}), 400
 
-    models, error = fetch_gpt_models(api_key, base_url, interface_mode)
-    return jsonify({'success': True, 'models': models, 'fallback': error is not None, 'error': error})
+    provider = resolve_image_provider(model_name, base_url)
+    errors = {}
+
+    if provider == 'gemini':
+        models, error = fetch_gemini_models(api_key, base_url)
+        if error is None:
+            return jsonify({'success': True, 'provider': 'gemini', 'message': f'Gemini connection successful: {base_url}', 'models': models})
+        return jsonify({'success': False, 'provider': 'gemini', 'message': error}), 502
+
+    if provider == 'gpt':
+        models, error = fetch_gpt_models(api_key, base_url)
+        if error is None:
+            return jsonify({'success': True, 'provider': 'gpt', 'message': f'GPT connection successful: {base_url}', 'models': models})
+        return jsonify({'success': False, 'provider': 'gpt', 'message': error}), 502
+
+    gemini_models, gemini_error = fetch_gemini_models(api_key, base_url)
+    if gemini_error is None:
+        return jsonify({'success': True, 'provider': 'gemini', 'message': f'Gemini connection successful: {base_url}', 'models': gemini_models})
+    errors['gemini'] = gemini_error
+
+    gpt_models, gpt_error = fetch_gpt_models(api_key, base_url)
+    if gpt_error is None:
+        return jsonify({'success': True, 'provider': 'gpt', 'message': f'GPT connection successful: {base_url}', 'models': gpt_models})
+    errors['gpt'] = gpt_error
+
+    return jsonify({
+        'success': False,
+        'message': '无法确认该地址可用的图片 provider',
+        'errors': errors,
+    }), 502
 
 
-@app.route('/api/gpt-image/test', methods=['POST'])
-def test_gpt_image_connection():
-    data = request.get_json(silent=True) or {}
-    api_key = (data.get('api_key') or '').strip()
-    base_url = (data.get('base_url') or DEFAULT_GPT_IMAGE_BASE_URL).strip().rstrip('/')
-    model = (data.get('model') or DEFAULT_GPT_IMAGE_MODEL).strip()
-
-    if not api_key:
-        return jsonify({'success': False, 'message': '请填写 API Key'})
-    if not model:
-        return jsonify({'success': False, 'message': '请填写模型 ID'})
-
-    try:
-        response = send_gpt_request(
-            'POST',
-            f'{base_url}/v1/images/generations',
-            api_key,
-            json={
-                'model': model,
-                'prompt': 'test',
-                'n': 1,
-                'size': '1024x1024',
-            },
-            timeout=15,
-        )
-        if response.status_code < 500:
-            return jsonify({'success': True, 'message': f'GPT 生图接口可访问：{base_url}'})
-        return jsonify({'success': False, 'message': f'HTTP {response.status_code}'})
-    except Exception as exc:
-        return jsonify({'success': False, 'message': str(exc)})
-
-
-@app.route('/api/text-to-image', methods=['POST'])
 def text_to_image():
     """文生图（支持 Session 隔离的连续对话）"""
     session_id = get_session_id()
@@ -1978,7 +2466,6 @@ def text_to_image():
         url = f"{base_url.rstrip('/')}/v1beta/models/{model_id.strip()}:generateContent"
         output_paths = []
         generation_stamp = int(time.time() * 1000)
-        used_timeout_fallback = False
         
         for i in range(image_count):
             logging.info(f"[DEBUG] Starting generation loop {i+1}")
@@ -2019,8 +2506,7 @@ def text_to_image():
             # 直接调用 API（不重试）
             try:
                 logging.info(f"[DEBUG] Sending request to {url}")
-                response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
-                used_timeout_fallback = used_timeout_fallback or response_used_fallback
+                response = post_gemini_request(url, payload, api_key)
                 logging.info(f"[DEBUG] Response status: {response.status_code}")
                 logging.info(f"[DEBUG] 响应头：{dict(response.headers)}")
                 if response.status_code >= 400:
@@ -2034,7 +2520,7 @@ def text_to_image():
                 return jsonify({'success': False, 'message': f'上游可能已成功，但传输失败：{str(e)}'})
             
             if response.status_code >= 400:
-                return forward_gemini_error_response(response)
+                return forward_raw_upstream_error(response)
 
             response.raise_for_status()
             result = response.json()
@@ -2053,9 +2539,6 @@ def text_to_image():
                         if mime_type.startswith("image/"):
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-                            
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2075,9 +2558,6 @@ def text_to_image():
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-                            
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2098,9 +2578,6 @@ def text_to_image():
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-                            
                             output_path = session_dir / f"output_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2113,8 +2590,6 @@ def text_to_image():
         if output_paths:
             append_gemini_history(session_id, 'text', prompt, output_paths)
             message = f'生成成功 {len(output_paths)} 张！'
-            if used_timeout_fallback:
-                message += ' 上游 2K/4K 超时，已用 1K 兜底生成并本地放大。'
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
@@ -2129,7 +2604,6 @@ def text_to_image():
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
-@app.route('/api/image-to-image', methods=['POST'])
 def image_to_image():
     """Image-to-image generation with session isolation."""
     session_id = get_session_id()
@@ -2187,7 +2661,6 @@ def image_to_image():
 
         output_paths = []
         generation_stamp = int(time.time() * 1000)
-        used_timeout_fallback = False
 
         for i in range(image_count):
             # 构建 parts 列表：所有参考图 + 提示词
@@ -2207,8 +2680,7 @@ def image_to_image():
 
             # 直接调用 API（不重试）
             try:
-                response, response_used_fallback = post_gemini_with_timeout_fallback(url, payload, api_key, image_size)
-                used_timeout_fallback = used_timeout_fallback or response_used_fallback
+                response = post_gemini_request(url, payload, api_key)
             except requests.exceptions.Timeout:
                 logging.error(f"[TIMEOUT] 请求超时")
                 return jsonify({'success': False, 'message': '上游可能已成功，但传输超时，请检查上游是否已生成图片'})
@@ -2222,7 +2694,7 @@ def image_to_image():
                 logging.error(f"[DEBUG] 响应体：{response.text[:500]}")
 
             if response.status_code >= 400:
-                return forward_gemini_error_response(response)
+                return forward_raw_upstream_error(response)
 
             response.raise_for_status()
             result = response.json()
@@ -2239,9 +2711,6 @@ def image_to_image():
                         if mime_type.startswith("image/"):
                             image_data = base64.b64decode(inline_data["data"])
                             image = Image.open(io.BytesIO(image_data))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2261,9 +2730,6 @@ def image_to_image():
                         if match:
                             image_data = base64.b64decode(match.group(2))
                             image = Image.open(io.BytesIO(image_data))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2284,9 +2750,6 @@ def image_to_image():
                             img_response = requests.get(image_url, timeout=30)
                             img_response.raise_for_status()
                             image = Image.open(io.BytesIO(img_response.content))
-                            if response_used_fallback:
-                                image = resize_image_to_target(image, get_target_dimensions(image_size, aspect_ratio))
-
                             output_path = session_dir / f"img2img_{generation_stamp}_{i+1}.png"
                             image.save(output_path)
                             output_paths.append(output_path.name)
@@ -2299,8 +2762,6 @@ def image_to_image():
         if output_paths:
             append_gemini_history(session_id, 'image', prompt, output_paths)
             message = f'生成成功 {len(output_paths)} 张！'
-            if used_timeout_fallback:
-                message += ' 上游 2K/4K 超时，已用 1K 兜底生成并本地放大。'
             return jsonify({
                 'success': True,
                 'images': [f'/output/{session_id}/{p}' for p in output_paths],
@@ -2315,7 +2776,6 @@ def image_to_image():
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
-@app.route('/api/gpt-image/generate', methods=['POST'])
 def gpt_image_generate():
     session_id = get_gpt_session_id()
     data = request.get_json(silent=True) or {}
@@ -2327,7 +2787,10 @@ def gpt_image_generate():
     size = normalize_gpt_image_size(data.get('size') or '1024x1024')
     aspect_ratio = normalize_gpt_aspect_ratio(data.get('aspect_ratio'))
     quality = normalize_gpt_image_quality(data.get('quality'))
-    interface_mode = get_gpt_interface_mode(data)
+    style = normalize_gpt_image_style(data.get('style'))
+    background = normalize_gpt_background(data.get('background'))
+    response_format = normalize_gpt_response_format(data.get('response_format'))
+    upscale = normalize_gpt_upscale(data.get('upscale'))
     prompt_with_layout = apply_gpt_layout_instruction(prompt, size, aspect_ratio)
 
     if not api_key:
@@ -2338,63 +2801,36 @@ def gpt_image_generate():
         return jsonify({'success': False, 'message': '请填写提示词'}), 400
     if image_count < 1 or image_count > 4:
         return jsonify({'success': False, 'message': 'Image count must be between 1 and 4'}), 400
-    if interface_mode == 'compatible' and image_count != 1:
-        return jsonify({'success': False, 'message': 'Compatible mode only supports 1 image'}), 400
 
     try:
-        used_timeout_fallback = False
-        resize_target = None
-        if interface_mode == 'compatible':
-            response = send_gpt_request(
-                'POST',
-                f'{base_url}/v1/chat/completions',
-                api_key,
-                json=build_gpt_compatible_text_payload(model, prompt_with_layout),
-                timeout=API_TIMEOUT,
-            )
-            if response.status_code >= 400:
-                return forward_error_response(response)
-            payload = response.json()
-            image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
-        else:
-            request_payload = {
-                'model': model,
-                'prompt': prompt_with_layout,
-                'n': image_count,
-                'size': size,
-                'quality': quality,
-            }
-            response = send_gpt_request(
-                'POST',
-                f'{base_url}/v1/images/generations',
-                api_key,
-                json=request_payload,
-                timeout=API_TIMEOUT,
-            )
-            fallback_size = get_gpt_timeout_fallback_size(size, aspect_ratio)
-            if response.status_code == 524 and fallback_size:
-                logging.warning('[524] GPT image upstream timed out at %s; retrying at %s fallback', size, fallback_size)
-                fallback_payload = {**request_payload, 'size': fallback_size}
-                response = send_gpt_request(
-                    'POST',
-                    f'{base_url}/v1/images/generations',
-                    api_key,
-                    json=fallback_payload,
-                    timeout=API_TIMEOUT,
-                )
-                if response.status_code < 400:
-                    used_timeout_fallback = True
-                    resize_target = parse_image_size(size)
-            if response.status_code >= 400:
-                return forward_error_response(response)
-            payload = response.json()
-            image_items = parse_gpt_image_items(payload)
+        resize_target = get_gpt_upscale_target(upscale, aspect_ratio)
+        request_payload = {
+            'model': model,
+            'prompt': prompt_with_layout,
+            'n': image_count,
+            'size': size,
+            'quality': quality,
+            'style': style,
+            'background': background,
+            'response_format': response_format,
+        }
+        if upscale:
+            request_payload['upscale'] = upscale
+        response = send_gpt_request(
+            'POST',
+            f'{base_url}/v1/images/generations',
+            api_key,
+            json=request_payload,
+            timeout=API_TIMEOUT,
+        )
+        if response.status_code >= 400:
+            return forward_error_response(response)
+        payload = response.json()
+        image_items = parse_gpt_image_items(payload)
         if not image_items:
             return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
         saved_files = save_gpt_image_items(session_id, image_items, 'generate', prompt, target_size=resize_target)
         message = f'生成成功 {len(saved_files)} 张！'
-        if used_timeout_fallback:
-            message += ' 上游 2K/4K 超时，已用较小尺寸兜底生成并本地放大。'
         result = jsonify({
             'success': True,
             'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],
@@ -2408,7 +2844,6 @@ def gpt_image_generate():
         return jsonify({'success': False, 'message': f'Error: {exc}'}), 500
 
 
-@app.route('/api/gpt-image/edit', methods=['POST'])
 def gpt_image_edit():
     session_id = get_gpt_session_id()
     api_key = (request.form.get('api_key') or '').strip()
@@ -2418,10 +2853,14 @@ def gpt_image_edit():
     size = normalize_gpt_image_size(request.form.get('size') or '1024x1024')
     aspect_ratio = normalize_gpt_aspect_ratio(request.form.get('aspect_ratio'))
     quality = normalize_gpt_image_quality(request.form.get('quality'))
+    style = normalize_gpt_image_style(request.form.get('style'))
+    background = normalize_gpt_background(request.form.get('background'))
+    response_format = normalize_gpt_response_format(request.form.get('response_format'))
+    upscale = normalize_gpt_upscale(request.form.get('upscale'))
     image_count = int(request.form.get('image_count', 1) or 1)
     use_last = (request.form.get('use_last_image') or '').lower() == 'true'
     uploaded_files = get_uploaded_image_files(request.files)
-    interface_mode = get_gpt_interface_mode(request.form)
+    mask_file = get_uploaded_mask_file(request.files)
     prompt_with_layout = apply_gpt_layout_instruction(prompt, size, aspect_ratio)
 
     if not api_key:
@@ -2432,8 +2871,6 @@ def gpt_image_edit():
         return jsonify({'success': False, 'message': '请填写提示词'}), 400
     if image_count < 1 or image_count > 4:
         return jsonify({'success': False, 'message': 'Image count must be between 1 and 4'}), 400
-    if interface_mode == 'compatible' and image_count != 1:
-        return jsonify({'success': False, 'message': 'Compatible mode only supports 1 image'}), 400
 
     if len(uploaded_files) > 4:
         return jsonify({'success': False, 'message': '最多支持 4 张参考图'}), 400
@@ -2441,20 +2878,16 @@ def gpt_image_edit():
     outbound_streams = []
     local_reference_paths = []
     try:
-        used_timeout_fallback = False
-        resize_target = None
+        resize_target = get_gpt_upscale_target(upscale, aspect_ratio)
         if use_last and not uploaded_files:
             state = load_gpt_session_state(session_id)
             last_image = state.get('last_image')
             if not last_image or not Path(last_image).exists():
                 return jsonify({'success': False, 'message': 'No reusable image found in the current session'}), 400
             local_reference_paths = [Path(last_image)]
-            if interface_mode == 'compatible':
-                image_urls = [f'/output/gpt/{session_id}/{local_reference_paths[0].name}']
-            else:
-                outbound_stream = open(last_image, 'rb')
-                outbound_streams.append(outbound_stream)
-                outbound_files = [('image[]', (local_reference_paths[0].name, outbound_stream, get_image_mime_type(last_image)))]
+            outbound_stream = open(last_image, 'rb')
+            outbound_streams.append(outbound_stream)
+            outbound_files = [('image', (local_reference_paths[0].name, outbound_stream, get_image_mime_type(last_image)))]
         else:
             if not uploaded_files:
                 return jsonify({'success': False, 'message': 'Please upload at least 1 reference image'}), 400
@@ -2462,72 +2895,43 @@ def gpt_image_edit():
             for index, uploaded_file in enumerate(uploaded_files, start=1):
                 compressed_stream, filename = compress_uploaded_image(uploaded_file)
                 outbound_streams.append(compressed_stream)
-                outbound_files.append(('image[]', (filename, compressed_stream, 'image/jpeg')))
-                if interface_mode == 'compatible':
-                    reference_dir = get_gpt_session_dir(session_id)
-                    reference_path = reference_dir / f'reference_{int(time.time())}_{index}.jpg'
-                    with reference_path.open('wb') as f:
-                        f.write(compressed_stream.getvalue())
-                    local_reference_paths.append(reference_path)
-
-        if interface_mode == 'compatible':
-            if not local_reference_paths:
-                return jsonify({'success': False, 'message': 'Compatible mode requires a reference image'}), 400
-            origin = request.host_url.rstrip('/')
-            reference_urls = [f'{origin}/output/gpt/{session_id}/{path.name}' for path in local_reference_paths]
-            response = send_gpt_request(
-                'POST',
-                f'{base_url}/v1/chat/completions',
-                api_key,
-                json=build_gpt_compatible_edit_payload(model, prompt_with_layout, reference_urls),
-                timeout=API_TIMEOUT,
-            )
-            if response.status_code >= 400:
-                return forward_error_response(response)
-            payload = response.json()
-            image_items = [{'type': 'url', 'value': url} for url in parse_gpt_compatible_image_urls(payload)]
-        else:
-            request_data = {
-                'model': model,
-                'prompt': prompt_with_layout,
-                'n': str(image_count),
-                'size': size,
-                'quality': quality,
-            }
-            response = send_gpt_request(
-                'POST',
-                f'{base_url}/v1/images/edits',
-                api_key,
-                data=request_data,
-                files=outbound_files,
-                timeout=API_TIMEOUT,
-            )
-            fallback_size = get_gpt_timeout_fallback_size(size, aspect_ratio)
-            if response.status_code == 524 and fallback_size:
-                logging.warning('[524] GPT image edit upstream timed out at %s; retrying at %s fallback', size, fallback_size)
-                fallback_data = {**request_data, 'size': fallback_size}
-                response = send_gpt_request(
-                    'POST',
-                    f'{base_url}/v1/images/edits',
-                    api_key,
-                    data=fallback_data,
-                    files=outbound_files,
-                    timeout=API_TIMEOUT,
-                )
-                if response.status_code < 400:
-                    used_timeout_fallback = True
-                    resize_target = parse_image_size(size)
-            if response.status_code >= 400:
-                return forward_error_response(response)
-            payload = response.json()
-            image_items = parse_gpt_image_items(payload)
+                field_name = 'image' if index == 1 else 'image[]'
+                outbound_files.append((field_name, (filename, compressed_stream, 'image/jpeg')))
+        request_data = {
+            'model': model,
+            'prompt': prompt_with_layout,
+            'n': str(image_count),
+            'size': size,
+            'quality': quality,
+            'style': style,
+            'background': background,
+            'response_format': response_format,
+        }
+        if upscale:
+            request_data['upscale'] = upscale
+        if mask_file:
+            mask_bytes = mask_file.read()
+            mask_stream = BytesIO(mask_bytes)
+            mask_name = mask_file.filename or 'mask.png'
+            outbound_streams.append(mask_stream)
+            outbound_files.append(('mask', (mask_name, mask_stream, getattr(mask_file, 'mimetype', None) or 'image/png')))
+        response = send_gpt_request(
+            'POST',
+            f'{base_url}/v1/images/edits',
+            api_key,
+            data=request_data,
+            files=outbound_files,
+            timeout=API_TIMEOUT,
+        )
+        if response.status_code >= 400:
+            return forward_error_response(response)
+        payload = response.json()
+        image_items = parse_gpt_image_items(payload)
 
         if not image_items:
             return jsonify({'success': False, 'message': 'Upstream did not return image data'}), 502
         saved_files = save_gpt_image_items(session_id, image_items, 'edit', prompt, target_size=resize_target)
         message = f'编辑成功 {len(saved_files)} 张！'
-        if used_timeout_fallback:
-            message += ' 上游 2K/4K 超时，已用较小尺寸兜底生成并本地放大。'
         result = jsonify({
             'success': True,
             'images': [f'/output/gpt/{session_id}/{name}' for name in saved_files],

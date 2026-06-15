@@ -25,6 +25,11 @@
             --shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
         }
 
+        html,
+        body {
+            height: 100%;
+        }
+
         * { box-sizing: border-box; }
         body {
             margin: 0;
@@ -36,10 +41,18 @@
                 radial-gradient(circle at bottom, rgba(125, 211, 252, 0.08), transparent 20%),
                 linear-gradient(135deg, var(--bg-a), var(--bg-b) 45%, var(--bg-c));
             min-height: 100vh;
+            height: 100%;
             padding: 28px;
         }
 
-        .shell { max-width: 1280px; margin: 0 auto; }
+        .shell {
+            max-width: 1280px;
+            margin: 0 auto;
+            height: 100%;
+            min-height: calc(100vh - 56px);
+            display: flex;
+            flex-direction: column;
+        }
         .workspace-note {
             margin-top: 14px;
             color: var(--muted);
@@ -59,11 +72,39 @@
             display: block;
         }
 
-        .hero-title-row {
+        .hero-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .hero-meta-chips {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 8px;
             flex-wrap: wrap;
+            min-width: 0;
+        }
+
+        .hero-meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 0 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(125, 211, 252, 0.14);
+            background: rgba(7, 12, 20, 0.6);
+            color: #b7c7da;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .hero-meta-chip.is-brand {
+            color: #e6f7ff;
         }
 
         .hero h1 {
@@ -113,6 +154,9 @@
             grid-template-columns: minmax(380px, 480px) 1fr;
             gap: 24px;
             margin-top: 24px;
+            flex: 1;
+            min-height: 0;
+            align-items: stretch;
         }
         .workflow-strip {
             display: grid;
@@ -145,9 +189,12 @@
             box-shadow: var(--shadow);
             border-radius: var(--radius);
             backdrop-filter: blur(10px);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
-        .panel-body { padding: 24px; }
+        .panel-body { padding: 24px; flex: 1; }
         .tabs {
             display: flex;
             gap: 8px;
@@ -373,9 +420,10 @@
 
         @media (max-width: 640px) {
             body { padding: 16px; }
+            .shell { min-height: calc(100vh - 32px); }
             .hero { padding: 22px 18px; border-radius: 24px; }
             .panel-body { padding: 18px; }
-            .hero-title-row { align-items: flex-start; }
+            .hero-head { align-items: flex-start; }
             .grid-2 { grid-template-columns: 1fr; }
             .actions { flex-direction: column; }
         }
@@ -385,13 +433,15 @@
     <div class="shell">
         <section class="hero">
             <div class="hero-grid">
-                <div>
-                    <div class="hero-title-row">
-                        <h1>GROK视频生成</h1>
-                        <div class="hero-actions">
-                            <button type="button" class="btn-secondary" id="openStepsDialogButton">使用步骤</button>
-                            <button type="button" class="btn-secondary" id="openSessionDialogButton">Session 信息</button>
-                        </div>
+                <div class="hero-head">
+                    <div class="hero-meta-chips">
+                        <div class="hero-meta-chip is-brand">Moai</div>
+                        <div class="hero-meta-chip">记得先获取模型列表奥~</div>
+                        <div class="hero-meta-chip">有问题请联系：Milo_wr</div>
+                    </div>
+                    <div class="hero-actions">
+                        <button type="button" class="btn-secondary" id="openStepsDialogButton">使用步骤</button>
+                        <button type="button" class="btn-secondary" id="openSessionDialogButton">Session 信息</button>
                     </div>
                 </div>
                 <!-- <div class="workspace-note">这一轮主要是整理页面承接和产品感，核心视频接口逻辑保持不动。</div> -->

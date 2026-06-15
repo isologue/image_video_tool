@@ -1,9 +1,9 @@
 services:
   video-image-tool:
-    image: milodk/video-image-tool-v4:latest
+    image: video-image-tool-v5
     build: .
     # image: milodk/video-image-tool-v4:latest
-    container_name: video-image-tool-v4
+    container_name: video-image-tool-v5
     ports:
       - "7863:7860"
     volumes:
@@ -15,7 +15,6 @@ services:
       - DEFAULT_BASE_URL=https://moai.wiki
       - DEFAULT_MODEL=gemini-3.1-flash-image-preview
       - GEMINI_RESPONSE_MODALITIES=TEXT,IMAGE
-      - ENABLE_IMAGE_TIMEOUT_FALLBACK=false
       - DEFAULT_VIDEO_BASE_URL=https://moai.wiki
       - DEFAULT_VIDEO_MODEL=grok-imagine-1.0-video
       - DEFAULT_GPT_IMAGE_BASE_URL=https://moai.wiki
