@@ -1395,13 +1395,13 @@
 
         function supportsHighResSize(provider, modelName) {
             const value = String(modelName || '').trim().toLowerCase();
+            if (provider === 'gemini') {
+                return true;
+            }
             if (!value) return false;
             const hasHighResKeyword = value.includes('2k') || value.includes('4k');
             if (provider === 'gpt') {
                 return value.includes('codex') || hasHighResKeyword;
-            }
-            if (provider === 'gemini') {
-                return hasHighResKeyword;
             }
             return false;
         }
